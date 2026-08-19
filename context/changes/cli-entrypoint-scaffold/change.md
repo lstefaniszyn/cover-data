@@ -1,7 +1,7 @@
 ---
 change_id: cli-entrypoint-scaffold
 title: CLI entrypoint scaffold
-status: implementing
+status: implemented
 created: 2026-08-19
 updated: 2026-08-19
 archived_at: null

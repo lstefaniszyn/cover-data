@@ -230,7 +230,7 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Automated
 
-- [x] 3.1 Both new headings are present: `grep -q "## CLI framework" CLAUDE.md && grep -q "## Typing discipline" CLAUDE.md`
+- [x] 3.1 Both new headings are present: `grep -q "## CLI framework" CLAUDE.md && grep -q "## Typing discipline" CLAUDE.md` — 0cfbed4
 
 #### Manual
 

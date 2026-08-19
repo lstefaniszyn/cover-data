@@ -215,9 +215,9 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Automated
 
-- [x] 2.1 Full suite passes, including new CLI tests: `uv run --locked pytest`
-- [x] 2.2 Typecheck passes: `uv run --locked mypy src`
-- [x] 2.3 Lint and format checks pass: `uv run --locked ruff check .` and `uv run --locked ruff format --check .`
+- [x] 2.1 Full suite passes, including new CLI tests: `uv run --locked pytest` — 4aecd76
+- [x] 2.2 Typecheck passes: `uv run --locked mypy src` — 4aecd76
+- [x] 2.3 Lint and format checks pass: `uv run --locked ruff check .` and `uv run --locked ruff format --check .` — 4aecd76
 
 #### Manual
 
@@ -230,7 +230,7 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Automated
 
-- [ ] 3.1 Both new headings are present: `grep -q "## CLI framework" CLAUDE.md && grep -q "## Typing discipline" CLAUDE.md`
+- [x] 3.1 Both new headings are present: `grep -q "## CLI framework" CLAUDE.md && grep -q "## Typing discipline" CLAUDE.md`
 
 #### Manual
 

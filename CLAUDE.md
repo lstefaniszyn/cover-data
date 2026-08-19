@@ -59,11 +59,26 @@ Already converted: `lefthook.yml` runs ruff / mypy / pytest through `uv run --lo
 
 Python, managed with **uv**, packaged via `pyproject.toml`. Chosen for the ecosystem that carries the hard parts: OCR returning per-fragment bounding boxes *and* confidence, image/table geometry, and PDF assembly.
 
-One wrinkle worth knowing: the tech-stack registry has no Python CLI card, so `tech-stack.md` records `starter_id: fastapi` as the closest Python vehicle — it was picked for its `uv` toolchain and typed-schema discipline, **not** because this is a web service. The scaffold therefore installed `fastapi` and `uvicorn`, which are surplus: `uv remove fastapi uvicorn` and add a CLI framework (Typer or Click) instead. **If you find yourself standing up an HTTP server, something has gone wrong.**
+One wrinkle worth knowing: the tech-stack registry has no Python CLI card, so `tech-stack.md` records `starter_id: fastapi` as the closest Python vehicle — it was picked for its `uv` toolchain and typed-schema discipline, **not** because this is a web service. The scaffold originally installed `fastapi` and `uvicorn` as surplus; both have since been removed in favor of Typer (see "CLI framework" below). **If you find yourself standing up an HTTP server, something has gone wrong.**
 
 Match confirmation and row preview happen in the terminal plus an OS image viewer (the tool writes a cropped PNG and opens it) — deliberately chosen over a local web UI to keep this a true CLI.
 
 Deployment target is `self-host` (a caseworker's machine). CI is GitHub Actions with manual promotion — there is nothing to auto-deploy to.
+
+## CLI framework
+
+Commands are built with Typer, not bare `argparse` or a hand-rolled `sys.argv` parser.
+
+- Each user-facing command is a function decorated with `@app.command()` in `src/cover_data/cli.py`; `src/cover_data/__init__.py`'s `main()` only calls `app()` — it holds no command logic itself.
+- Command parameters use type hints (`Annotated[str, typer.Argument(...)]` / `typer.Option(...)`) — Typer derives validation and `--help` text from them, so an untyped parameter is a bug, not a style choice.
+- Match-confirmation and row-preview prompts (see PRD FR-006, FR-007) go through Typer's `typer.confirm()` / `rich`-based output, not raw `input()`.
+- `inspect`, `search`, and `redact` are the three registered subcommands, matching roadmap slices S-01/S-02/S-03 (`context/foundation/roadmap.md`). Each is currently a stub that exits 1 with a "not yet implemented" message until its slice lands — replace the stub body, don't restructure the command.
+
+## Typing discipline
+
+`mypy` runs on every commit (`lefthook.yml`) and in CI (`ci.yml`, `release.yml`) under `[tool.mypy] strict = true, files = ["src"]` (`pyproject.toml`).
+
+OCR fragments, table rows, and person-match results are typed data structures (Pydantic models or `@dataclass`, not raw `dict`s) — this is a domain invariant, not a style preference: the hard problem in this project is keeping the OCR-fragment → cell → row → person relationship correct under skewed/wavy scans (see "Domain invariants" below), and an untyped dict makes a shape mismatch invisible until runtime.
 
 ## Domain invariants
 

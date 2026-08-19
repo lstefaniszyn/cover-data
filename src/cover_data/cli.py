@@ -10,7 +10,11 @@ app = typer.Typer()
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(importlib.metadata.version("cover-data"))
+        try:
+            typer.echo(importlib.metadata.version("cover-data"))
+        except importlib.metadata.PackageNotFoundError:
+            typer.echo("cover-data is not installed as a package.", err=True)
+            raise typer.Exit(code=1) from None
         raise typer.Exit()
 
 

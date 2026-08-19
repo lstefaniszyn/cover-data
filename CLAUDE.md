@@ -22,7 +22,7 @@ Scaffolded, with one commit (`init project`) behind it. `uv init` produced a src
 - `pyproject.toml` — `requires-python = ">=3.14"`, uv_build backend, and a `cover-data = "cover_data:main"` console script that points at a `main` **which does not exist yet**.
 - `uv.lock` + `.venv/` — 15 packages, Python 3.14.7.
 
-Installed dependencies are `fastapi` and `uvicorn`, both of which the stack decision calls surplus (see Stack below). `ruff`, `mypy`, and `pytest` are **not** installed, though `lefthook.yml` already invokes all three.
+`typer` is the runtime dependency (`fastapi`/`uvicorn`, once installed as surplus, have been removed — see Stack below). `ruff`, `mypy`, and `pytest` are installed as dev dependencies, and `lefthook.yml` gates commits on all three.
 
 **Always run through the local `.venv`.** Prefix commands with `uv run`, which resolves it automatically. Never call system Python, `pip`, or a bare `pytest`/`ruff`/`mypy` — `C:\Python314` is first on PATH and is not this project's interpreter. Activating the venv in a shell doesn't help across tool calls, since each Bash invocation gets a fresh environment.
 

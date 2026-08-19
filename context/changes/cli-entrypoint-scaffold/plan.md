@@ -203,9 +203,9 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Automated
 
-- [x] 1.1 Lockfile matches pyproject: `uv lock --check`
-- [x] 1.2 Typecheck passes under new strict config: `uv run --locked mypy src`
-- [x] 1.3 Existing suite still green: `uv run --locked pytest`
+- [x] 1.1 Lockfile matches pyproject: `uv lock --check` — f92bcc1
+- [x] 1.2 Typecheck passes under new strict config: `uv run --locked mypy src` — f92bcc1
+- [x] 1.3 Existing suite still green: `uv run --locked pytest` — f92bcc1
 
 #### Manual
 
@@ -215,9 +215,9 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Automated
 
-- [ ] 2.1 Full suite passes, including new CLI tests: `uv run --locked pytest`
-- [ ] 2.2 Typecheck passes: `uv run --locked mypy src`
-- [ ] 2.3 Lint and format checks pass: `uv run --locked ruff check .` and `uv run --locked ruff format --check .`
+- [x] 2.1 Full suite passes, including new CLI tests: `uv run --locked pytest`
+- [x] 2.2 Typecheck passes: `uv run --locked mypy src`
+- [x] 2.3 Lint and format checks pass: `uv run --locked ruff check .` and `uv run --locked ruff format --check .`
 
 #### Manual
 

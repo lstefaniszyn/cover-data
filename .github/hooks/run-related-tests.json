@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "npx eslint .",
+        "powershell": "npx eslint .",
+        "cwd": ".",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "bash": "npx tsc --noEmit",
+        "powershell": "npx tsc --noEmit",
+        "cwd": ".",
+        "timeoutSec": 30
+      },
+      {
+        "type": "command",
+        "bash": "node ./scripts/hooks/run-related-tests.mjs",
+        "powershell": "node ./scripts/hooks/run-related-tests.mjs",
+        "cwd": ".",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

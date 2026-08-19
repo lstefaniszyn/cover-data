@@ -1,0 +1,99 @@
+FROM mcr.microsoft.com/devcontainers/typescript-node:22-bookworm
+
+# Accept proxy build arguments
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG NO_PROXY
+ARG no_proxy
+
+# Set proxy environment variables for the build
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    http_proxy=${http_proxy} \
+    https_proxy=${https_proxy} \
+    NO_PROXY=${NO_PROXY} \
+    no_proxy=${no_proxy}
+
+USER root 
+
+
+# Configure apt to use proxy if set
+RUN if [ -n "$HTTP_PROXY" ]; then \
+    echo "Acquire::http::Proxy \"$HTTP_PROXY\";" > /etc/apt/apt.conf.d/proxy.conf; \
+    fi && \
+    if [ -n "$HTTPS_PROXY" ]; then \
+    echo "Acquire::https::Proxy \"$HTTPS_PROXY\";" >> /etc/apt/apt.conf.d/proxy.conf; \
+    fi
+
+# Copy installation scripts
+COPY ./scripts/installTools.sh /tmp/installTools.sh
+
+# Ensure environment variables from a mounted .env file load for interactive shells
+RUN cat <<'EOF' >/etc/profile.d/load-local-env.sh
+if [ -f /.env ]; then
+    set -a
+    . /.env
+    set +a
+fi
+EOF
+
+# Set environment variables for yarn, npm
+ENV YARN_CACHE_FOLDER=/yarn_cache
+ENV npm_config_cache=/npm_cache
+
+# Create cache directories with proper permissions
+RUN mkdir -p /yarn_cache /npm_cache /commandhistory \
+    && chmod 777 /yarn_cache /npm_cache /commandhistory
+
+RUN apt-get -y update \
+    && apt-get upgrade -y \
+    && apt-get dist-upgrade -y \
+    && apt-get -y --no-install-recommends install \
+       git \
+       curl \
+       wget \
+       ripgrep \
+       unzip \
+       zsh \
+       vim \
+       systemctl \
+       socat \
+       postgresql-client \
+       gpg \
+       build-essential \
+       make \
+       python3 \
+       g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN chsh -s /usr/bin/zsh root
+
+# Install Claude CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Update npm to specific version and install Yarn 4.4.1 (Backstage requirement)
+RUN npm install -g npm@11.6.1 \
+    && corepack enable \
+    && corepack prepare yarn@4.4.1 --activate
+
+# Install python uv into a system path available during Docker builds
+# MUST be installed before installTools.sh since install_specify_cli depends on uv
+ENV UV_INSTALL_DIR=/usr/local/bin
+ENV PATH="/usr/local/bin:${PATH}"
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv --version
+
+# Install additional tools using the script (including Chrome with proper architecture detection)
+RUN chmod +x /tmp/installTools.sh && bash /tmp/installTools.sh
+
+RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+    && sudo mkdir -p -m 755 /etc/apt/keyrings \
+    && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+    && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && sudo apt update \
+    && sudo apt install gh -y

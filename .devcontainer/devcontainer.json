@@ -1,0 +1,104 @@
+{
+  "name": "Trade with me",
+  "dockerComposeFile": "docker-compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/app",
+  "build": {
+    "args": {
+      "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
+      "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
+      "http_proxy": "${localEnv:HTTP_PROXY}",
+      "https_proxy": "${localEnv:HTTPS_PROXY}",
+      "NO_PROXY": "${localEnv:NO_PROXY:-localhost,127.0.0.1,db}",
+      "no_proxy": "${localEnv:NO_PROXY:-localhost,127.0.0.1,db}"
+    }
+  },
+  "customizations": {
+    // Configure properties specific to VS Code.
+    "vscode": {
+      "settings": {
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/usr/bin/zsh",
+            "args": ["-l"]
+          }
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        // Crucial for kubelogin to work in Dev Containers without a browser
+        "terminal.integrated.shellIntegration.enabled": true
+      },
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "dsznajder.es7-react-js-snippets",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "wix.vscode-import-cost",
+        "ms-azuretools.vscode-azurecli",
+        "ms-azuretools.vscode-docker",
+        "ms-playwright.playwright",
+        "GitHub.vscode-pull-request-github",
+        "davidanson.vscode-markdownlint",
+        "streetsidesoftware.code-spell-checker",
+        "editorconfig.editorconfig",
+        "yzhang.markdown-all-in-one",
+        "ms-vscode.powershell",
+        "github.copilot",
+        "42Crunch.vscode-openapi",
+        "ckolkman.vscode-postgres",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "SupeCoder.port-killer",
+        "steoates.autoimport",
+        "anthropic.claude-code",
+        "vscode-copilot-clip",
+        "mikestead.dotenv",
+        "astro-build.astro-vscode",
+        "supabase.vscode-supabase-extension",
+        "openai.chatgpt"
+      ]
+    }
+  },
+  "forwardPorts": [3000, 54321, 54322, 54323],
+  "portsAttributes": {
+    "3000": {
+      "label": "App (Astro / wrangler dev)",
+      "onAutoForward": "notify"
+    },
+    "54321": {
+      "label": "Supabase API",
+      "onAutoForward": "silent"
+    },
+    "54322": {
+      "label": "Supabase DB (Postgres)",
+      "onAutoForward": "silent"
+    },
+    "54323": {
+      "label": "Supabase Studio",
+      "onAutoForward": "notify"
+    }
+  },
+  "containerEnv": {
+    "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
+    "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
+    "http_proxy": "${localEnv:HTTP_PROXY}",
+    "https_proxy": "${localEnv:HTTPS_PROXY}",
+    "NO_PROXY": "${localEnv:NO_PROXY:-localhost,127.0.0.1,db}",
+    "no_proxy": "${localEnv:NO_PROXY:-localhost,127.0.0.1,db}"
+  },
+  "remoteEnv": {
+    "SHELL": "/usr/bin/zsh"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/python:1": {}
+  },
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-bashhistory,target=/commandhistory,type=volume",
+    "source=${localWorkspaceFolderBasename}-yarncache,target=/yarn_cache,type=volume",
+    "source=${localWorkspaceFolderBasename}-npmcache,target=/npm_cache,type=volume",
+    "source=${localWorkspaceFolderBasename}-cypress_cache,target=/cypress_cache,type=volume"
+  ],
+  "postStartCommand": "bash /workspaces/app/.devcontainer/scripts/load-workspace-env.sh && yarn install && bash /workspaces/app/.devcontainer/scripts/setup-supabase.sh",
+  "remoteUser": "root"
+}

@@ -1,0 +1,57 @@
+# docker-compose.yaml for TradeWithMe Development Environment
+# Postgres, Auth, Storage, and Studio are provided by `npx supabase start`
+# against the host Docker engine.
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        WORKSPACE_FOLDER: /workspaces/app
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        http_proxy: ${HTTP_PROXY:-}
+        https_proxy: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+        no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - http_proxy=${HTTP_PROXY:-}
+      - https_proxy=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1}
+      - no_proxy=${NO_PROXY:-localhost,127.0.0.1}
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=2000
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ../:/workspaces/app:delegated
+      - ../../../Ksiazki/10xDev:/workspaces/app/10xDev:delegated
+      - /var/run/docker.sock:/var/run/docker.sock
+      - app_node_modules:/workspaces/app/node_modules
+      - yarn_cache:/yarn_cache
+      - npm_cache:/npm_cache
+      - ./entrypoint.sh:/entrypoint.sh:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000" # Astro dev / wrangler dev
+    networks:
+      - app_network
+    restart: unless-stopped
+    command: /entrypoint.sh npm run dev
+
+volumes:
+  app_node_modules:
+    name: app_node_modules
+  yarn_cache:
+    name: app_yarn_cache
+  npm_cache:
+    name: app_npm_cache
+
+networks:
+  app_network:
+    driver: bridge
+    name: app_network

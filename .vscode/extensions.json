@@ -1,0 +1,32 @@
+{
+  "recommendations": [
+    "astro-build.astro-vscode",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "christian-kohler.path-intellisense",
+    "dsznajder.es7-react-js-snippets",
+    "formulahendry.auto-rename-tag",
+    "wix.vscode-import-cost",
+    "ms-azuretools.vscode-azurecli",
+    "ms-azuretools.vscode-docker",
+    "ms-playwright.playwright",
+    "github.vscode-pull-request-github",
+    "davidanson.vscode-markdownlint",
+    "streetsidesoftware.code-spell-checker",
+    "editorconfig.editorconfig",
+    "yzhang.markdown-all-in-one",
+    "ms-vscode.powershell",
+    "github.copilot",
+    "42crunch.vscode-openapi",
+    "ckolkman.vscode-postgres",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "supecoder.port-killer",
+    "steoates.autoimport",
+    "anthropic.claude-code",
+    "mikestead.dotenv",
+    "supabase.vscode-supabase-extension",
+    "openai.chatgpt"
+  ],
+  "unwantedRecommendations": []
+}

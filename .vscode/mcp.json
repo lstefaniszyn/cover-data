@@ -1,0 +1,23 @@
+{
+  "servers": {
+    "LocalDB": {
+      "command": "/workspaces/app/.vscode/mcp-postgres.sh",
+      "args": ["backstage"],
+      "type": "stdio"
+    },
+
+    "context7": {
+      "command": "/workspaces/app/.vscode/mcp-context7.sh",
+      "type": "stdio"
+    },
+    "mui-mcp": {
+      "type": "stdio",
+      "command": "/workspaces/app/.vscode/mcp-mui.sh",
+      "args": []
+    },
+    "cloudflare": {
+      "url": "https://mcp.cloudflare.com/mcp"
+    }
+  },
+  "inputs": []
+}

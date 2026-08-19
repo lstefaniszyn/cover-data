@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "context7": {
+      "tools": ["*"],
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "exa": {
+      "tools": ["*"],
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.exa.ai/mcp"]
+    }
+  },
+  "inputs": []
+}

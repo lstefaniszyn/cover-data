@@ -1,0 +1,51 @@
+# Lefthook hooks for Cover the Data.
+#
+# Stack per context/foundation/tech-stack.md: Python + uv, pyproject.toml package,
+# explicit typing (type hints + Pydantic), pytest. Replaces the ESLint/tsc/Vitest/
+# Playwright hooks inherited from an unrelated Astro project.
+#
+# HEADS-UP: these commands do not work until /10x-bootstrapper has scaffolded the
+# project — there is no pyproject.toml, no uv.lock, and no src/ yet, so every hook
+# fails on a commit made today. Either hold off on `lefthook install` until after
+# bootstrap, or bypass per-invocation with LEFTHOOK=0.
+#
+# Every job runs through `uv run --locked` so a git hook can never silently
+# mutate uv.lock behind your back; it errors instead if the lockfile drifted.
+
+pre-commit:
+  # Sequential on purpose: `format` rewrites and re-stages the files that
+  # `typecheck` and `test` then read. Parallel would race against those writes.
+  parallel: false
+  skip:
+    - merge
+    - rebase
+  commands:
+    # Runs first (lefthook orders non-parallel commands alphabetically).
+    format:
+      glob: "*.py"
+      run: uv run --locked ruff format {staged_files} && uv run --locked ruff check --fix {staged_files} && git add {staged_files}
+    test:
+      glob: "*.py"
+      # -m "not slow": keep the commit gate quick. Mark fixture-heavy OCR and
+      # full-page redaction tests `@pytest.mark.slow` (register the marker in
+      # pyproject.toml) — they still run in full at pre-push.
+      run: uv run --locked pytest -q -x -m "not slow"
+    typecheck:
+      # Retarget if bootstrap lands on a layout other than src/.
+      run: uv run --locked mypy src
+
+pre-push:
+  parallel: false
+  commands:
+    format-check:
+      run: uv run --locked ruff format --check .
+    lint:
+      run: uv run --locked ruff check .
+    lockfile:
+      # Fails if pyproject.toml changed without re-locking.
+      run: uv lock --check
+    test:
+      # Full suite, slow markers included.
+      run: uv run --locked pytest
+    typecheck:
+      run: uv run --locked mypy src

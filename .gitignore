@@ -1,0 +1,151 @@
+# macOS
+.DS_Store
+Books/
+10xDev/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.scannerwork
+.structurizr
+.sonar
+*.orig
+# Coverage directory generated when running tests with coverage
+coverage
+
+# Dependencies
+**/node_modules/
+# generated-catalog/
+**/storybook-static/
+
+# Node version directives
+.nvmrc
+
+# dotenv environment variables file
+.env
+.env*
+.venv
+!.env.example
+!.devcontainer/.env
+
+# Cloudflare local dev secrets (never commit)
+.dev.vars
+
+# Ignore Python virtual environment used for TechDocs
+techdocs-venv/
+
+# Build output
+.astro/types.d.ts
+dist
+.wrangler/
+dist-types
+*.code-workspace
+**/workspace.json
+e2e-test-report
+.github/bootstrap/artifacts/
+
+# Temporary change files created by Vim
+*.swp
+
+# MkDocs build output
+site
+
+# Sensitive credentials
+*-credentials.yaml
+
+
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+
+# Ignore any .tfvars files that are generated automatically for each Terraform run. Most
+# .tfvars files are managed as part of configuration and so should be included in
+# version control.
+#
+# example.tfvars
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+bs_prod_soundcheck.sql
+
+# Include override files you do wish to add to version control using negated pattern
+#
+# !example_override.tf
+
+# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+# example: *tfplan*
+
+# IDEs and editors
+/.idea
+.vscode/settings.json
+
+soundcheck-analytics-backend/
+TO_REMOVE/
+
+# *.sh
+environment.sh
+.devenv
+.direnv
+
+.bin/*
+.envrc
+test-secrets.sh
+workspace.yaml
+*.scratch.*
+.jj.config.toml
+.astro/types.d.ts
+
+# Yarn files
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+# Devenv
+.devenv*
+devenv.local.nix
+devenv*
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
+
+*storybook.log
+packages/backend/build_version
+
+venv/
+/packages/e2e/bdd_test/configuration/environment/.env.local
+/packages/e2e/bdd_test/configuration/environment/.env.prod
+/packages/e2e/bdd_test/configuration/environment/.env.qa
+
+# Ignore all files in examples/contributors except the example files
+examples/contributors/*
+!examples/contributors/*.example.yaml
+
+# stryker temp files
+.stryker-tmp
+
+# Playwright
+playwright/.auth/
+e2e-test-report/
+reports/
+.playwright-cli/*
+auth.json

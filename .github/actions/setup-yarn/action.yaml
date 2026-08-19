@@ -1,0 +1,44 @@
+name: "Setup Yarn"
+description: "Sets up Yarn with GitHub registry configuration"
+
+inputs:
+  yarn-version:
+    description: "Version of Yarn to use"
+    required: false
+    default: "4.0.2"
+  github-token:
+    description: "GitHub token for npm registry authentication"
+    required: true
+  azure-artifacts-pat-base64:
+    description: "Base64 encoded Personal Access Token for Azure Artifacts authentication"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup yarn configuration
+      shell: bash
+      run: |
+        rm -f .yarnrc.yml
+        cat << EOF > .yarnrc.yml
+        cacheFolder: /yarn_cache/berry-cache
+        enableGlobalCache: false
+        enableStrictSsl: false
+        nmMode: classic
+        nodeLinker: node-modules
+        npmRegistryServer: "https://registry.npmjs.org"
+        npmScopes:
+          volvogroup-internal:
+            npmAuthToken: "${{ inputs.github-token }}"
+            npmRegistryServer: "https://npm.pkg.github.com/"
+        # USE this doc to setup Tokens 'azure-artifacts-auth.md'
+          volvo:
+            npmRegistryServer: "https://pkgs.dev.azure.com/volvogroup/_packaging/VES/npm/registry/"
+            npmAlwaysAuth: true
+            npmAuthIdent: "${{ inputs.azure-artifacts-pat-base64 }}"
+        unsafeHttpWhitelist:
+          - "*"
+        EOF
+        corepack enable
+        corepack prepare yarn@${{ inputs.yarn-version }} --activate
+        yarn --version

@@ -1,5 +1,10 @@
 name: CI
 
+# Mirrors lefthook.yml's pre-push gate: format-check, lint, lockfile, test,
+# typecheck — same order, same commands, run through `uv run --locked` so a
+# drifted uv.lock fails loudly instead of silently diverging from what
+# contributors run locally.
+
 on:
   push:
     branches: [main]
@@ -7,107 +12,30 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        id: npm-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-      - run: npm ci
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-      - run: npx astro sync
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm test
-      - run: npm run build
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          PUBLIC_SENTRY_DSN: ${{ secrets.PUBLIC_SENTRY_DSN }}
-      - name: Upload build artifact
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-dist
-          path: dist/
-          retention-days: 1
 
-  # E2E mirrors the Lefthook pre-push gate: Playwright against a fixture-backed
-  # dev server (MARKET_DATA_FIXTURE=true) and a self-seeding local Supabase
-  # (supabase/seed.sql provisions the e2e user + sentiment-cache rows).
-  e2e:
-    runs-on: ubuntu-latest
-    needs: build
-    env:
-      MARKET_DATA_FIXTURE: "true"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          node-version: 22
-          cache: npm
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        id: npm-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-      - run: npm ci
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-      - run: npx astro sync
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-      - name: Install Playwright system deps
-        run: npx playwright install-deps chromium
-      - name: Cache Supabase Docker images
-        uses: actions/cache@v4
-        id: supabase-docker-cache
-        with:
-          path: /tmp/supabase-docker-cache
-          key: supabase-docker-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-      - name: Load cached Supabase Docker images
-        if: steps.supabase-docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/supabase-docker-cache/images.tar
-      - name: Start local Supabase (applies migrations + seed.sql)
-        run: npx supabase start
-      - name: Export local Supabase credentials
-        run: |
-          CREDS=$(npx supabase status -o env --override-name api.url=SUPABASE_URL --override-name auth.anon_key=SUPABASE_KEY)
-          echo "$CREDS" >> "$GITHUB_ENV"
-          echo "$CREDS" > .dev.vars
-      - name: Run Playwright e2e
-        run: npm run test:e2e
-        env:
-          E2E_SEEDED_EMAIL: ${{ secrets.E2E_SEEDED_EMAIL }}
-          E2E_SEEDED_PASSWORD: ${{ secrets.E2E_SEEDED_PASSWORD }}
-      - name: Save Supabase Docker images
-        if: success() && steps.supabase-docker-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p /tmp/supabase-docker-cache
-          docker save $(docker images --format "{{.Repository}}:{{.Tag}}" | grep -v '<none>') \
-            -o /tmp/supabase-docker-cache/images.tar
-      - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report
-          path: e2e-test-report/
-          retention-days: 7
-      - name: Stop local Supabase
-        if: always()
-        run: npx supabase stop
+          python-version-file: ".python-version"
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Format check
+        run: uv run --locked ruff format --check .
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Lockfile check
+        run: uv lock --check
+
+      - name: Test
+        run: uv run --locked pytest
+
+      - name: Typecheck
+        run: uv run --locked mypy src

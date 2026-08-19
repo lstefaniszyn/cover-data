@@ -16,9 +16,19 @@ Where the brief and the PRD disagree, **the PRD wins**. The brief assumes a web 
 
 ## Repository state (read this first)
 
-Pre-bootstrap and **pre-first-commit**. `git log` is empty, `git ls-files` returns nothing, every file in the tree is untracked. There is no source code, no `pyproject.toml`, no `src/`.
+Scaffolded, with one commit (`init project`) behind it. `uv init` produced a src-layout package:
 
-The next step in the workflow is `/10x-bootstrapper`, which reads `context/foundation/tech-stack.md`.
+- `src/cover_data/__init__.py` — the only source file; empty of logic.
+- `pyproject.toml` — `requires-python = ">=3.14"`, uv_build backend, and a `cover-data = "cover_data:main"` console script that points at a `main` **which does not exist yet**.
+- `uv.lock` + `.venv/` — 15 packages, Python 3.14.7.
+
+Installed dependencies are `fastapi` and `uvicorn`, both of which the stack decision calls surplus (see Stack below). `ruff`, `mypy`, and `pytest` are **not** installed, though `lefthook.yml` already invokes all three.
+
+**Always run through the local `.venv`.** Prefix commands with `uv run`, which resolves it automatically. Never call system Python, `pip`, or a bare `pytest`/`ruff`/`mypy` — `C:\Python314` is first on PATH and is not this project's interpreter. Activating the venv in a shell doesn't help across tool calls, since each Bash invocation gets a fresh environment.
+
+**This network runs a TLS-inspecting proxy.** Any uv command that fetches needs `--system-certs` (or `UV_NATIVE_TLS=1`), or it dies with `invalid peer certificate: UnknownIssuer`. `pip-audit` can't be fixed that way — it uses `requests`/`certifi` rather than the system store, so the dependency tree is currently unaudited. Worth pinning the uv setting in `uv.toml`.
+
+Bootstrap details and the full audit trail: `context/changes/bootstrap-verification/verification.md`.
 
 ## Inherited cruft — the biggest trap here
 
@@ -43,13 +53,13 @@ Two of these will actively break a Python workflow and should be fixed before wr
 
 Real scaffold docs worth keeping: `context/README.md`, `context/foundation/README.md`, `context/changes/README.md`, `context/archive/README.md`, `.mcp.json`.
 
-Already converted: `lefthook.yml` now runs ruff / mypy / pytest through `uv run --locked`. Its jobs fail until the project is scaffolded, so don't run `lefthook install` before `/10x-bootstrapper` (or bypass with `LEFTHOOK=0`).
+Already converted: `lefthook.yml` runs ruff / mypy / pytest through `uv run --locked`, and lefthook is installed (`uv tool install lefthook`) with hooks synced — commits are gated. `.claude/settings.json` now runs `.claude/hooks/post_edit_python.py` (ruff on edited `.py` files only) instead of the ESLint/tsc/Vitest trio.
 
 ## Stack
 
 Python, managed with **uv**, packaged via `pyproject.toml`. Chosen for the ecosystem that carries the hard parts: OCR returning per-fragment bounding boxes *and* confidence, image/table geometry, and PDF assembly.
 
-One wrinkle worth knowing: the tech-stack registry has no Python CLI card, so `tech-stack.md` records `starter_id: fastapi` as the closest Python vehicle — it was picked for its `uv` toolchain and typed-schema discipline, **not** because this is a web service. Bootstrapper's scaffold command ends in `uv add fastapi uvicorn`; drop both and add a CLI framework (Typer or Click) instead. If you find yourself standing up an HTTP server, something has gone wrong.
+One wrinkle worth knowing: the tech-stack registry has no Python CLI card, so `tech-stack.md` records `starter_id: fastapi` as the closest Python vehicle — it was picked for its `uv` toolchain and typed-schema discipline, **not** because this is a web service. The scaffold therefore installed `fastapi` and `uvicorn`, which are surplus: `uv remove fastapi uvicorn` and add a CLI framework (Typer or Click) instead. **If you find yourself standing up an HTTP server, something has gone wrong.**
 
 Match confirmation and row preview happen in the terminal plus an OS image viewer (the tool writes a cropped PNG and opens it) — deliberately chosen over a local web UI to keep this a true CLI.
 
@@ -79,7 +89,7 @@ This project is driven by the 10xDevs "10x-agents" context-driven methodology. S
 - `context/changes/<change-id>/` — one folder per in-flight change, created by `/10x-new`, identified by `change.md`. Change-scoped research, frames, plans, and reviews go here — never in `foundation/`.
 - `context/archive/` — completed changes, moved by `/10x-archive`.
 
-Flow so far: `/10x-shape` → `/10x-prd` → `/10x-tech-stack-selector` ✅ → **`/10x-bootstrapper`** ← next → `/10x-roadmap`.
+Flow so far: `/10x-shape` → `/10x-prd` → `/10x-tech-stack-selector` ✅ → `/10x-bootstrapper` ✅ → **`/10x-roadmap`** ← next.
 
 Then per roadmap slice: `/10x-new` → `/10x-research` → `/10x-frame` → `/10x-plan` → `/10x-plan-review` → `/10x-implement` / `/10x-tdd` / `/10x-e2e` → `/10x-impl-review` → `/10x-archive`.
 
@@ -87,9 +97,19 @@ Don't invent a different planning-artifact layout — extend `context/changes/<c
 
 ## Commands
 
-**None of the usual commands work yet** — there is no project to run them against. Do not copy command lists out of the leftover JS config.
+Everything goes through `uv run` so it lands in `.venv`. Do not copy command lists out of the leftover JS config.
 
-Once `/10x-bootstrapper` has scaffolded the project, commands follow standard uv conventions (`uv sync`, `uv run pytest`, `uv run pytest path/to/test_x.py::test_name` for a single test). Replace this section with the real commands from the generated `pyproject.toml` at that point rather than leaving these guesses in place.
+```bash
+uv sync                                    # install from uv.lock
+uv add <pkg> / uv remove <pkg>             # add --system-certs on this network
+uv run pytest                              # once pytest is a dev dependency
+uv run pytest tests/test_x.py::test_name   # single test
+uv run ruff check . / uv run ruff format . # once ruff is a dev dependency
+uv run mypy src                            # once mypy is a dev dependency
+uv lock --check                            # verify uv.lock matches pyproject.toml
+```
+
+`ruff` 0.16.3, `mypy` 2.3.1, and `pytest` 9.1.1 are installed as dev dependencies. `[tool.ruff] extend-exclude` in `pyproject.toml` keeps linting off the vendored agent tooling in `.github/`, `.agents/`, `.codex/`, and `.claude/` — without it `ruff check .` fails on scripts this project doesn't own.
 
 ## MCP
 

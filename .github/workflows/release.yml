@@ -1,0 +1,73 @@
+name: Release
+
+# Replaces the old Cloudflare Wrangler deploy workflow inherited from
+# trade-with-me. There is nothing to auto-deploy to: this tool self-hosts on
+# a caseworker's machine (context/foundation/tech-stack.md), so "deploy" here
+# means packaging a standalone Windows .exe (PyInstaller) and attaching it to
+# a GitHub Release for manual promotion — triggered by a version tag or by
+# hand. A wheel would still require Python + uv on that machine; a one-file
+# binary doesn't.
+#
+# Runs on windows-latest because PyInstaller bundles the interpreter that
+# built it — it cannot cross-compile a Windows exe from Linux/macOS.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version-file: ".python-version"
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Format check
+        run: uv run --locked ruff format --check .
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Lockfile check
+        run: uv lock --check
+
+      - name: Test
+        run: uv run --locked pytest
+
+      - name: Typecheck
+        run: uv run --locked mypy src
+
+      - name: Generate PyInstaller entry point
+        # `cover-data = "cover_data:main"` in pyproject.toml is a console-script
+        # entry point, not a script path — PyInstaller needs an actual .py file
+        # to target, so synthesize the one-line wrapper it would otherwise call.
+        run: |
+          "from cover_data import main" | Set-Content entry.py
+          "main()" | Add-Content entry.py
+
+      - name: Build Windows executable
+        # --with pulls PyInstaller into an ephemeral overlay for this run only
+        # — it's a packaging tool, not something end users need, so it has no
+        # business in uv.lock.
+        run: uv run --with pyinstaller pyinstaller --onefile --name cover-data --console entry.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cover-data-windows
+          path: dist/cover-data.exe
+          retention-days: 30
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/cover-data.exe

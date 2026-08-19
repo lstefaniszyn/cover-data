@@ -26,10 +26,12 @@ pre-commit:
       run: uv run --locked ruff format {staged_files} && uv run --locked ruff check --fix {staged_files} && git add {staged_files}
     test:
       glob: "*.py"
-      # -m "not slow": keep the commit gate quick. Mark fixture-heavy OCR and
-      # full-page redaction tests `@pytest.mark.slow` (register the marker in
+      # Keep the commit gate quick: mark fixture-heavy OCR and full-page
+      # redaction tests `@pytest.mark.slow` (the marker is registered in
       # pyproject.toml) — they still run in full at pre-push.
-      run: uv run --locked pytest -q -x -m "not slow"
+      # Single quotes are load-bearing: lefthook strips double quotes here, and
+      # pytest then reads `-m not` with `slow` as a stray path argument.
+      run: uv run --locked pytest -q -x -m 'not slow'
     typecheck:
       # Retarget if bootstrap lands on a layout other than src/.
       run: uv run --locked mypy src

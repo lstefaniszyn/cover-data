@@ -20,8 +20,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version-file: ".python-version"
           enable-cache: true
+        # No python-version input: setup-uv reads .python-version from the
+        # working directory automatically. Pinning it here was an invalid
+        # input carried over from actions/setup-python — GitHub Actions
+        # ignored it silently rather than failing the run.
 
       - run: uv sync --locked
 

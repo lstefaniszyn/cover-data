@@ -1,7 +1,6 @@
 name: Release
 
-# Replaces the old Cloudflare Wrangler deploy workflow inherited from
-# trade-with-me. There is nothing to auto-deploy to: this tool self-hosts on
+# There is nothing to auto-deploy to: this tool self-hosts on
 # a caseworker's machine (context/foundation/tech-stack.md), so "deploy" here
 # means packaging a standalone Windows .exe (PyInstaller) and attaching it to
 # a GitHub Release for manual promotion — triggered by a version tag or by

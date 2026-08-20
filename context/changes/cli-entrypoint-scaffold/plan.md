@@ -209,7 +209,7 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Manual
 
-- [ ] 1.4 `uv tree` no longer lists `fastapi` or `uvicorn`
+- [x] 1.4 `uv tree` no longer lists `fastapi` or `uvicorn` — verified 2026-08-20
 
 ### Phase 2: CLI scaffold + tests
 
@@ -221,10 +221,10 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Manual
 
-- [ ] 2.4 `uv run cover-data --version` prints a version string and exits 0
-- [ ] 2.5 `uv run cover-data --help` lists `inspect`, `search`, and `redact`
-- [ ] 2.6 `uv run cover-data inspect` (and `search`, `redact`) prints a "not yet implemented" message and exits non-zero
-- [ ] 2.7 `uv run python -c "from cover_data import main; main()"` behaves the same as running `cover-data` directly with no arguments
+- [x] 2.4 `uv run cover-data --version` prints a version string and exits 0 — verified 2026-08-20
+- [x] 2.5 `uv run cover-data --help` lists `inspect`, `search`, and `redact` — verified 2026-08-20
+- [x] 2.6 `uv run cover-data inspect` (and `search`, `redact`) prints a "not yet implemented" message and exits non-zero — verified 2026-08-20
+- [x] 2.7 `uv run python -c "from cover_data import main; main()"` behaves the same as running `cover-data` directly with no arguments — verified 2026-08-20
 
 ### Phase 3: Instruction file updates
 
@@ -234,4 +234,4 @@ None — the current `main()` stub has no real users; replacing its body is not 
 
 #### Manual
 
-- [ ] 3.2 The pasted sections accurately describe the code as implemented in Phase 2
+- [x] 3.2 The pasted sections accurately describe the code as implemented in Phase 2 — verified 2026-08-20

@@ -3,6 +3,7 @@ project: "Cover the Data"
 version: 1
 status: draft
 created: 2026-08-19
+updated: 2026-08-20
 context_type: greenfield
 product_type: cli
 target_scale:
@@ -99,4 +100,8 @@ Single user, single device for the MVP — no authentication layer. The org may 
 
 ## Open Questions
 
-1. **Do we have a real representative distorted (wavy/skewed) scan to build and test row-reconstruction against, rather than a clean synthetic one?** — Owner: user. Blocks validating FR-003 and FR-005's exact-match assumption against the actual problem this project exists to solve.
+1. **Partially resolved 2026-08-20 — a sample set exists; a real distorted scan does not.** Six sample scans now live at `context/test_images/`: a deliberate distortion ladder covering tilt (`1.png`), uneven lighting and shadows (`2.png`), page waviness (`3.png`), blur and noise (`4.png`), columns cut off at the page edge (`5.png`), and scan lines/artifacts (`6.png`) — eight debtor rows each, with placeholder names rather than real personal data. This is enough to build and exercise row reconstruction against, so **it no longer blocks starting the work**.
+   It is **not** enough to close the question as originally asked. The set is precisely the "clean synthetic one" this question warned against, and its waviness case is mild, so FR-003 and FR-005's exact-match assumption remain unvalidated against the real problem.
+   **Residual question** — Owner: user: can a real representative distorted scan be obtained before FR-003 and FR-005 are treated as proven?
+
+2. **What does "the one supported document layout" mean, given the samples contain three?** — Owner: user. Variant **A** (`Lp.` column plus separate `Imię` / `Nazwisko` columns, six in total): `1.png`, `3.png`. Variant **B** (`Lp.` plus a merged `Imię i nazwisko` column, five in total): `2.png`, `4.png`, `6.png`. Variant **C** (no `Lp.` column, split name, five in total, last column truncated at the page edge): `5.png` alone. FR-003 and FR-005 are both written against *one* layout, and Non-Goals scopes v1 to one — but the available samples contain three. Two readings are open: a **fixed column schema**, in which case one variant is chosen and the rest become out-of-scope negatives (note that picking B discards both the only waviness sample and the sharpest cut-off-column sample); or a **family of bordered debtor tables with per-document column detection**, which keeps all six in scope at the cost of harder cell attribution and a harder exact-match name lookup under FR-005. Until this is settled, "correct row reconstruction" has no definition, and the non-matching samples are either out-of-scope negatives or evidence that the one-layout assumption is wrong. Blocks hand-labelling row-extent ground truth (see `context/foundation/test-plan.md` §3 Phase 1).

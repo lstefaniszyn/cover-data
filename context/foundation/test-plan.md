@@ -76,12 +76,12 @@ ladder, one page each, eight debtor rows per page:
 
 | File | Label | Distortion exercised | Column layout |
 |---|---|---|---|
-| `1.png` | Przykład 1 | clean, slightly tilted | 6 columns, given/family name split |
-| `2.png` | Przykład 2 | shadows, uneven lighting | 5 columns, name merged |
-| `3.png` | Przykład 3 | page waviness | 6 columns, given/family name split |
-| `4.png` | Przykład 4 | low quality, blur and noise | 5 columns, name merged |
-| `5.png` | Przykład 5 | columns cut off at the right edge | 5 columns, name merged, last column truncated |
-| `7.png` | Przykład 6 | scan lines and artifacts | 5 columns, name merged |
+| `1.png` | Przykład 1 | clean, slightly tilted | **A** — `Lp.` + split name (6 cols) |
+| `2.png` | Przykład 2 | shadows, uneven lighting | **B** — `Lp.` + merged name (5 cols) |
+| `3.png` | Przykład 3 | page waviness | **A** — `Lp.` + split name (6 cols) |
+| `4.png` | Przykład 4 | low quality, blur and noise | **B** — `Lp.` + merged name (5 cols) |
+| `5.png` | Przykład 5 | columns cut off at the right edge | **C** — no `Lp.`, split name (5 cols), last column truncated |
+| `6.png` | Przykład 6 | scan lines and artifacts | **B** — `Lp.` + merged name (5 cols) |
 
 Five findings, which the risk map above already reflects:
 
@@ -94,16 +94,27 @@ Five findings, which the risk map above already reflects:
    for a *real* representative distorted scan "rather than a clean
    synthetic one." Risks #1 and #2 can be exercised against this set but
    cannot be *closed* by it.
-3. **The column schema is not stable across the set.** Two files split
-   given and family name into separate columns; four merge them. The PRD
-   scopes v1 to one representative layout. Either the MVP layout is chosen
-   and the remaining files become out-of-scope negatives, or the
-   one-layout assumption is wrong. **This is a blocking decision for §3
-   Phase 1** — it defines what correct row reconstruction means before any
-   ground truth can be labelled.
-4. **`7.png` is labelled "Przykład 6" and no `6.png` exists.** A harness
-   that indexes fixtures by filename will mislabel that case. Fixture
-   identity should come from an explicit manifest, not from the filename.
+3. **The column schema is not stable across the set — three variants, not
+   one.** **A** (`Lp.` + split given/family name, 6 columns): `1.png`,
+   `3.png`. **B** (`Lp.` + merged name, 5 columns): `2.png`, `4.png`,
+   `6.png`. **C** (no `Lp.`, split name, 5 columns, last column truncated):
+   `5.png` alone. The PRD scopes v1 to one representative layout, so
+   **this is a blocking decision for §3 Phase 1** — it defines what correct
+   row reconstruction means before any ground truth can be labelled.
+   Note the cost asymmetry: choosing B yields the most fixtures (three) but
+   discards both `3.png` (the only waviness sample) and `5.png` (the
+   sharpest test of Risks #1 and #2, see finding 5), so it is the option
+   with the most fixtures and the least test value. A third reading is open
+   — that "one layout" means a family of bordered debtor tables with
+   per-document column detection rather than a fixed column schema, which
+   keeps all six samples in scope at the cost of harder cell attribution
+   and a harder FR-005 name match.
+4. **Fixture identity should come from an explicit manifest, not from the
+   filename.** The set originally shipped as `1.png`–`5.png` plus `7.png`,
+   with `7.png` labelled "Przykład 6" and no `6.png` at all; the gap was
+   closed by renaming to `6.png` in `3f451c5`. Filename-derived identity
+   was already wrong once here, and the in-page "Przykład N" title is the
+   authoritative label.
 5. **`5.png` is the sharpest available test of Risks #1 and #2**, because
    its last column runs off the page edge: a band computed from detected
    *content* extent rather than *page* extent stops short and leaves

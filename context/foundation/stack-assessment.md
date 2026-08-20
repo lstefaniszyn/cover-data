@@ -1,19 +1,70 @@
 ---
 project: cover-data
 assessed_at: 2026-08-19T00:00:00Z
-agent_readiness: ready-with-compensation
+last_updated: 2026-08-20
+agent_readiness: ready
 context_type: brownfield
 stack_components:
-  language: Python 3.14
-  framework: none (CLI framework not yet selected — fastapi/uvicorn present but flagged as surplus)
+  language: Python 3.13 (moved from 3.14 — see Update 2026-08-20)
+  framework: Typer (CLI)
+  ocr: PaddleOCR (local; PP-OCRv5/v6 + UVDoc unwarping)
   build_tool: uv
   test_runner: pytest 9.1.1
   package_manager: uv
   ci_provider: GitHub Actions
   deployment_target: self-host (PyInstaller Windows .exe via GitHub Release)
-gates_passed: 6
-gates_failed: 3
+gates_passed: 9
+gates_failed: 0
 ---
+
+## Update — 2026-08-20
+
+The assessment below is the original 2026-08-19 snapshot and is preserved as
+written. Three things have changed since; where this section and the original
+text disagree, this section is current.
+
+**Both identified gaps are closed.** Gap 1 (no CLI framework) and Gap 2 (mypy
+unconfigured) were resolved together in roadmap foundation slice F-01
+(`context/archive/`-bound change `cli-entrypoint-scaffold`). Typer is installed
+and `fastapi`/`uvicorn` are removed; `src/cover_data/cli.py` registers
+`inspect`/`search`/`redact` via `@app.command()` and `main()` only calls `app()`.
+`[tool.mypy] strict = true, files = ["src"]` is set in `pyproject.toml`. Both
+"ready-to-paste" instruction blocks at the end of this document have been adopted
+into `CLAUDE.md` essentially verbatim. The Framework gate therefore now passes on
+all three applicable criteria, which is why the frontmatter reads 9/0 and
+`agent_readiness: ready` rather than the original 6/3 and
+`ready-with-compensation`.
+
+**Language moves from Python 3.14 to 3.13.** This is a deliberate downgrade taken
+to unblock the OCR engine choice, not drift. PaddleOCR's official models ship only
+in PaddlePaddle static-graph format and the `paddle2onnx` conversion path requires
+the `paddlepaddle` framework, whose wheels stop at `cp313`. The `paddleocr`
+package itself resolves cleanly on 3.14 — it is the engine underneath that does
+not. The codebase uses no 3.14-only feature, so the cost is confined to
+`.python-version`, `requires-python` in `pyproject.toml`, and the CI/release
+workflow matrices. Rationale of record: `context/foundation/tech-stack.md`
+("OCR engine and Python version"); full evidence:
+`context/changes/scan-row-reconstruction/research.md`.
+
+**A new stack component enters: local OCR.** PaddleOCR (with `opencv`, `shapely`,
+`pyclipper`, `pydantic`, `pypdfium2` arriving as transitive dependencies) is
+adopted in slice S-01. Assessed against the four gates it is a **pass with one
+caveat**: it is convention-based (a documented pipeline API with explicit
+per-module model directories), well represented in training data, and has current
+versioned upstream documentation. The caveat is the *Typed* gate — PaddleOCR's
+Python API returns loosely-typed result objects and dicts rather than typed
+models, so the project's own typed OCR-fragment/row models (already mandated by
+the Typing-discipline block below, now live in `CLAUDE.md`) are the compensation,
+and the engine sits behind a small `Protocol` so Paddle, ONNX, and Tesseract stay
+swappable.
+
+⚠️ **One open risk this introduces**, worth carrying into the next health check:
+`paddlepaddle` is a heavy runtime dependency and is materially harder to freeze
+with PyInstaller than ONNX Runtime, which bears directly on the
+`deployment_target` above (`release.yml`'s one-file Windows `.exe`). The planned
+mitigation is a build-time `paddle2onnx` export — develop against the first-party
+pipeline, ship a lean `onnxruntime` runtime — but this is not yet proven against
+the actual release build.
 
 ## Stack Components
 

@@ -28,7 +28,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -271,11 +272,17 @@ def render_page(
 ) -> Image.Image:
     """Render the page at SS times scale; callers downsample after warping.
 
-    `geometry_out`, if given, is filled with the last block's column edges
-    (`"edges"`) and row edges (`"row_edges"`), in the same SS-scale pixel
-    space as the returned image -- lets a caller target a specific cell
-    (e.g. to land a signature squarely inside one row) without re-deriving
-    the table layout by eye.
+    `geometry_out`, if given, is filled with `"blocks"`: every block's column
+    edges (`"edges"`) and row edges (`"row_edges"`), in order, in the same
+    SS-scale pixel space as the returned image -- lets a caller target a
+    specific cell (e.g. to land a signature squarely inside one row) without
+    re-deriving the table layout by eye. Recording every block (not just the
+    last) is what lets a two-table page like `23.png` describe both.
+
+    Independently, when a `GeometryRecorder` is active (`_recording()`), this
+    also seeds it with same-size label masks -- one label per row edge, one
+    per column edge, across every block, drawn regardless of `block.grid` so
+    a borderless table's would-be edges are still exportable.
     """
     style = style or Style()
     img = Image.new("L", (page_w * SS, page_h * SS), PAPER)
@@ -292,6 +299,19 @@ def render_page(
     x_left = style.margin_x * SS
     y = style.table_top * SS
     line_h = _text_h(body) + style.line_gap * SS
+    gw = max(style.grid_width * SS, 3)
+
+    recorder = _ACTIVE_RECORDER
+    row_mask = col_mask = None
+    row_mask_draw = col_mask_draw = None
+    block_labels: list[dict[str, list[int]]] = []
+    next_row_label = 1
+    next_col_label = 1
+    if recorder is not None:
+        row_mask = Image.new("L", img.size, 0)
+        col_mask = Image.new("L", img.size, 0)
+        row_mask_draw = ImageDraw.Draw(row_mask)
+        col_mask_draw = ImageDraw.Draw(col_mask)
 
     for block in blocks:
         if block.caption:
@@ -333,19 +353,122 @@ def render_page(
             row_edges.append(y)
 
         if block.grid:
-            gw = style.grid_width * SS
             for ry in row_edges:
                 draw.line([(edges[0], ry), (edges[-1], ry)], fill=INK, width=gw)
             for ex in edges:
                 draw.line([(ex, table_y0), (ex, row_edges[-1])], fill=INK, width=gw)
 
+        if row_mask_draw is not None and col_mask_draw is not None:
+            row_labels = []
+            for ry in row_edges:
+                row_mask_draw.line(
+                    [(edges[0], ry), (edges[-1], ry)], fill=next_row_label, width=gw
+                )
+                row_labels.append(next_row_label)
+                next_row_label += 1
+            col_labels = []
+            for ex in edges:
+                col_mask_draw.line(
+                    [(ex, table_y0), (ex, row_edges[-1])], fill=next_col_label, width=gw
+                )
+                col_labels.append(next_col_label)
+                next_col_label += 1
+            block_labels.append({"row_labels": row_labels, "col_labels": col_labels})
+
         if geometry_out is not None:
-            geometry_out["edges"] = edges
-            geometry_out["row_edges"] = row_edges
+            geometry_out.setdefault("blocks", []).append(
+                {"edges": edges, "row_edges": row_edges}
+            )
 
         y += 46 * SS
 
+    if recorder is not None and row_mask is not None and col_mask is not None:
+        recorder.set_initial(img, row_mask, col_mask, block_labels)
+
     return img
+
+
+# --------------------------------------------------------------------------
+# Geometry export: a label mask is threaded through the *geometric* subset of
+# the distortion chain below (never the photometric one -- lighting, contrast,
+# blur, noise, ...) so the exact row/column edges `render_page` computes
+# survive into `manifest.json` in final-image pixel coordinates. See plan.md
+# Phase 3 for the full contract.
+#
+# Mechanism: every geometric transform function below logs its own call (kind
+# + params) onto the currently-active `GeometryRecorder`, if any, in addition
+# to doing its normal work on the real image. `render_page` seeds the
+# recorder with same-size label masks (one row-edge id per row edge, one
+# column-edge id per column edge, across every block). Replaying the logged
+# ops onto those masks with NEAREST resampling and a zero fill -- never a
+# real transform's BICUBIC/LANCZOS/PAPER-fill -- carries the labels through
+# unchanged; replaying the same ops onto a copy of the *initial* rendered
+# page with the real resampling (skipping photometric ops, which are never
+# logged) yields the "pre-photometric render" `verify()`'s ink check needs.
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _GeomOp:
+    kind: str
+    params: dict[str, Any]
+
+
+class GeometryRecorder:
+    """Records the geometric ops applied while building one fixture, so the
+    same sequence can be replayed against a label mask or a pre-photometric
+    image companion. Not thread-safe; one recorder is active at a time."""
+
+    def __init__(self) -> None:
+        self.ops: list[_GeomOp] = []
+        self.initial_page_image: Image.Image | None = None
+        self.initial_row_mask: Image.Image | None = None
+        self.initial_col_mask: Image.Image | None = None
+        self.block_labels: list[dict[str, list[int]]] = []
+
+    def log(self, kind: str, **params: Any) -> None:
+        self.ops.append(_GeomOp(kind, params))
+
+    def set_initial(
+        self,
+        page_image: Image.Image,
+        row_mask: Image.Image,
+        col_mask: Image.Image,
+        block_labels: list[dict[str, list[int]]],
+    ) -> None:
+        self.initial_page_image = page_image.copy()
+        self.initial_row_mask = row_mask
+        self.initial_col_mask = col_mask
+        self.block_labels = block_labels
+
+    def replay_mask(self, mask: Image.Image) -> Image.Image:
+        for op in self.ops:
+            mask = _apply_geom_op(mask, op, mode="mask")
+        return mask
+
+    def replay_image(self, img: Image.Image) -> Image.Image:
+        for op in self.ops:
+            img = _apply_geom_op(img, op, mode="image")
+        return img
+
+
+_ACTIVE_RECORDER: GeometryRecorder | None = None
+
+
+@contextmanager
+def _recording() -> Iterator[GeometryRecorder]:
+    """Activate a `GeometryRecorder` for the duration of the block. Every
+    geometric transform called inside it (directly or via a fixture's
+    `build()`) logs onto it transparently -- no call site elsewhere in this
+    file needs to know recording is happening."""
+    global _ACTIVE_RECORDER
+    recorder = GeometryRecorder()
+    previous = _ACTIVE_RECORDER
+    _ACTIVE_RECORDER = recorder
+    try:
+        yield recorder
+    finally:
+        _ACTIVE_RECORDER = previous
 
 
 # --------------------------------------------------------------------------
@@ -353,39 +476,70 @@ def render_page(
 # --------------------------------------------------------------------------
 
 
-def _remap(img: Image.Image, dx: np.ndarray, dy: np.ndarray) -> Image.Image:
+def _remap(
+    img: Image.Image, dx: np.ndarray, dy: np.ndarray, mode: str = "clamp"
+) -> Image.Image:
+    """`mode="clamp"` (the real-image default) repeats edge pixels outside
+    the source bounds, which looks natural on a photograph. `mode="zero"`
+    (mask use only) fills out-of-bounds destinations with 0 instead, so a
+    label never bleeds a false edge into a warped-in margin."""
     arr = np.asarray(img, dtype=np.uint8)
     h, w = arr.shape[:2]
     ys, xs = np.mgrid[0:h, 0:w]
-    sx = np.clip(xs + dx, 0, w - 1).astype(np.int32)
-    sy = np.clip(ys + dy, 0, h - 1).astype(np.int32)
-    return Image.fromarray(arr[sy, sx])
+    fx = xs + dx
+    fy = ys + dy
+    sx = np.clip(fx, 0, w - 1).astype(np.int32)
+    sy = np.clip(fy, 0, h - 1).astype(np.int32)
+    out = arr[sy, sx]
+    if mode == "zero":
+        in_bounds = (fx >= 0) & (fx <= w - 1) & (fy >= 0) & (fy <= h - 1)
+        out = np.where(in_bounds, out, 0).astype(np.uint8)
+    return Image.fromarray(out)
 
 
-def wave(
-    img: Image.Image, amp: float, period: float, phase: float = 0.0, vert: float = 0.0
-) -> Image.Image:
-    """Page waviness: rows displaced horizontally as a function of y."""
-    h, w = img.height, img.width
+def _wave_disp(
+    h: int, w: int, amp: float, period: float, phase: float, vert: float
+) -> tuple[np.ndarray, np.ndarray]:
     ys = np.arange(h).reshape(-1, 1)
     xs = np.arange(w).reshape(1, -1)
     dx = amp * SS * np.sin(2 * math.pi * ys / (period * SS) + phase)
     dx = np.broadcast_to(dx, (h, w))
     dy = vert * SS * np.sin(2 * math.pi * xs / (period * 1.7 * SS) + phase)
     dy = np.broadcast_to(dy, (h, w))
-    return _remap(img, dx, dy)
+    return dx, dy
 
 
-def fold(img: Image.Image, y_frac: float, strength: float) -> Image.Image:
-    """A crease: local vertical pinch plus a soft shadow band across the page."""
-    h, w = img.height, img.width
+def wave(
+    img: Image.Image, amp: float, period: float, phase: float = 0.0, vert: float = 0.0
+) -> Image.Image:
+    """Page waviness: rows displaced horizontally as a function of y."""
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("wave", amp=amp, period=period, phase=phase, vert=vert)
+    dx, dy = _wave_disp(img.height, img.width, amp, period, phase, vert)
+    return _remap(img, dx, dy, mode="clamp")
+
+
+def _fold_disp(
+    h: int, w: int, y_frac: float, strength: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     ys = np.arange(h).reshape(-1, 1).astype(float)
     y0 = y_frac * h
     sigma = 0.045 * h
     profile = np.exp(-(((ys - y0) / sigma) ** 2))
     dy = np.broadcast_to(-strength * SS * profile, (h, w))
     dx = np.zeros((h, w))
-    warped = _remap(img, dx, dy)
+    return dx, dy, profile
+
+
+def fold(img: Image.Image, y_frac: float, strength: float) -> Image.Image:
+    """A crease: local vertical pinch (geometric) plus a soft shadow band
+    across the page (photometric -- excluded from the mask/companion replay,
+    see `_apply_geom_op`)."""
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("fold", y_frac=y_frac, strength=strength)
+    h, w = img.height, img.width
+    dx, dy, profile = _fold_disp(h, w, y_frac, strength)
+    warped = _remap(img, dx, dy, mode="clamp")
 
     arr = np.asarray(warped, dtype=np.float32)
     shade = 1.0 - 0.28 * np.broadcast_to(profile, (h, w))
@@ -394,6 +548,8 @@ def fold(img: Image.Image, y_frac: float, strength: float) -> Image.Image:
 
 
 def rotate(img: Image.Image, deg: float, fill: int = PAPER) -> Image.Image:
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("rotate", deg=deg)
     return img.rotate(deg, resample=Image.Resampling.BICUBIC, fillcolor=fill)
 
 
@@ -410,7 +566,12 @@ def _perspective_coeffs(
 
 
 def perspective(img: Image.Image, quad: Sequence[tuple[float, float]]) -> Image.Image:
-    """Warp so the page corners land on `quad` (fractions of width/height)."""
+    """Warp so the page corners land on `quad` (fractions of width/height).
+    The coefficients depend only on `img`'s size and `quad`, never on pixel
+    content, so the same coefficients are valid for the mask and the
+    pre-photometric companion (see `test_perspective_coeffs_are_content_independent`)."""
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("perspective", quad=[tuple(pt) for pt in quad])
     w, h = img.width, img.height
     src = [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
     dst = [(fx * w, fy * h) for fx, fy in quad]
@@ -422,6 +583,159 @@ def perspective(img: Image.Image, quad: Sequence[tuple[float, float]]) -> Image.
         resample=Image.Resampling.BICUBIC,
         fillcolor=PAPER,
     )
+
+
+def _apply_geom_op(img: Image.Image, op: _GeomOp, mode: str) -> Image.Image:
+    """Replay one logged geometric op. `mode="mask"` uses NEAREST resampling
+    and a zero fill throughout, so integer labels survive unchanged.
+    `mode="image"` uses the same resampling the real transform uses, so the
+    result is the "pre-photometric render" `verify()`'s ink check samples."""
+    is_mask = mode == "mask"
+    remap_mode = "zero" if is_mask else "clamp"
+    resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BICUBIC
+    resize_resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.LANCZOS
+    fill = 0 if is_mask else PAPER
+
+    if op.kind == "wave":
+        dx, dy = _wave_disp(img.height, img.width, **op.params)
+        return _remap(img, dx, dy, mode=remap_mode)
+    if op.kind == "fold":
+        dx, dy, _profile = _fold_disp(img.height, img.width, **op.params)
+        return _remap(img, dx, dy, mode=remap_mode)
+    if op.kind == "rotate":
+        return img.rotate(op.params["deg"], resample=resample, fillcolor=fill)
+    if op.kind == "perspective":
+        w, h = img.width, img.height
+        src = [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
+        dst = [(fx * w, fy * h) for fx, fy in op.params["quad"]]
+        coeffs = _perspective_coeffs(src, dst)
+        return img.transform(
+            (w, h),
+            Image.Transform.PERSPECTIVE,
+            coeffs,
+            resample=resample,
+            fillcolor=fill,
+        )
+    if op.kind == "crop":
+        box = op.params["box"]
+        return img.crop(box)
+    if op.kind == "resize":
+        return img.resize((op.params["w"], op.params["h"]), resize_resample)
+    if op.kind == "grow_canvas":
+        extra_h = op.params["extra_h"]
+        canvas = Image.new("L", (img.width, img.height + extra_h), fill)
+        canvas.paste(img, (0, 0))
+        return canvas
+    if op.kind == "scanner_border":
+        pad, w, h = op.params["pad"], op.params["w"], op.params["h"]
+        canvas = Image.new("L", (w + 2 * pad, h + 2 * pad), fill)
+        canvas.paste(img, (pad, pad))
+        return canvas.resize((w, h), resize_resample)
+    raise ValueError(f"unknown geometric op: {op.kind!r}")
+
+
+@dataclass(frozen=True)
+class EdgePolyline:
+    """One row or column edge, recovered from a warped label mask.
+
+    `points` is the edge sampled as an `(x, y)` polyline in final-image pixel
+    coordinates -- a curve, not a scalar, because a wavy or creased page bends
+    a straight source edge (11.png, 17.png). `clipped` is set when the label
+    produced no surviving pixels at all: the edge warped entirely off the
+    final image (18.png's bottom-truncated last row) rather than being merely
+    partially cropped by a rotation corner, which is normal and not flagged.
+    """
+
+    points: list[tuple[int, int]]
+    clipped: bool
+
+
+def _edge_polyline(
+    mask: Image.Image, label: int, axis: str, max_points: int = 60
+) -> EdgePolyline:
+    """Recover one edge's polyline from a final (fully-replayed) label mask.
+    `axis="row"` samples y as a function of x (a row edge, naturally
+    parameterized across the page width); `axis="col"` samples x as a
+    function of y (a column edge, across the page height).
+
+    Evenly subsampled to at most `max_points` (always keeping the first and
+    last): a full per-pixel curve is ~1000+ points per edge, which serves no
+    one -- the wave/fold amplitudes in this fixture set vary over tens to a
+    few hundred pixels, so a few dozen samples describe the same curve with
+    no visible loss, and the manifest stays something a human can open.
+    """
+    arr = np.asarray(mask)
+    ys, xs = np.where(arr == label)
+    if xs.size == 0:
+        return EdgePolyline(points=[], clipped=True)
+
+    if axis == "row":
+        primary, secondary = xs, ys
+    elif axis == "col":
+        primary, secondary = ys, xs
+    else:
+        raise ValueError(f"unknown axis: {axis!r}")
+
+    order = np.argsort(primary, kind="stable")
+    primary_sorted = primary[order]
+    secondary_sorted = secondary[order]
+    unique_primary, start_idx = np.unique(primary_sorted, return_index=True)
+    end_idx = np.r_[start_idx[1:], len(primary_sorted)]
+
+    if len(unique_primary) > max_points:
+        keep = np.unique(
+            np.linspace(0, len(unique_primary) - 1, max_points).round().astype(int)
+        )
+        unique_primary = unique_primary[keep]
+        start_idx = start_idx[keep]
+        end_idx = end_idx[keep]
+
+    points: list[tuple[int, int]] = []
+    for p, s, e in zip(unique_primary, start_idx, end_idx, strict=True):
+        secondary_val = int(np.median(secondary_sorted[s:e]))
+        point = (int(p), secondary_val) if axis == "row" else (secondary_val, int(p))
+        points.append(point)
+    return EdgePolyline(points=points, clipped=False)
+
+
+def _export_geometry(
+    recorder: GeometryRecorder,
+) -> tuple[dict[str, Any], Image.Image]:
+    """Replay a fixture's recorded geometric ops to produce the manifest's
+    `"geometry"` block and the pre-photometric render `verify()`'s ink check
+    samples. Call once, with `recorder` populated by a `_recording()` block
+    that wrapped exactly one `fixture.build()` call."""
+    assert recorder.initial_row_mask is not None
+    assert recorder.initial_col_mask is not None
+    assert recorder.initial_page_image is not None
+
+    final_row_mask = recorder.replay_mask(recorder.initial_row_mask)
+    final_col_mask = recorder.replay_mask(recorder.initial_col_mask)
+    pre_photo = recorder.replay_image(recorder.initial_page_image)
+
+    tables = []
+    for block in recorder.block_labels:
+        row_edges = [
+            _edge_polyline(final_row_mask, label, axis="row")
+            for label in block["row_labels"]
+        ]
+        col_edges = [
+            _edge_polyline(final_col_mask, label, axis="col")
+            for label in block["col_labels"]
+        ]
+        tables.append(
+            {
+                "row_edges": [
+                    {"points": [list(p) for p in e.points], "clipped": e.clipped}
+                    for e in row_edges
+                ],
+                "col_edges": [
+                    {"points": [list(p) for p in e.points], "clipped": e.clipped}
+                    for e in col_edges
+                ],
+            }
+        )
+    return {"tables": tables}, pre_photo
 
 
 def lighting(
@@ -495,7 +809,17 @@ def punch_holes(img: Image.Image, count: int = 3) -> Image.Image:
 
 
 def scanner_border(img: Image.Image, pad: int = 26, level: int = 32) -> Image.Image:
-    """Lid-open scan: the page floats on a dark background."""
+    """Lid-open scan: the page floats on a dark background.
+
+    Reads as photometric (just a border) but is not: growing the canvas,
+    pasting the page inside, then resizing back to the original frame shrinks
+    and recenters every pixel -- a genuine geometric move despite the plan's
+    "photometric" list naming it. Logged like the others so a mask/companion
+    replay tracks the shrink; the dark `level` fill is the photometric part
+    and is deliberately not reproduced in that replay (see `_apply_geom_op`).
+    """
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("scanner_border", pad=pad, w=img.width, h=img.height)
     out = Image.new("L", (img.width + 2 * pad, img.height + 2 * pad), level)
     out.paste(img, (pad, pad))
     return out.resize((img.width, img.height), Image.Resampling.LANCZOS)
@@ -704,19 +1028,30 @@ def downsample(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.resize((w, h), Image.Resampling.LANCZOS)
 
 
+def _fit_page_crop_box(img: Image.Image, margin: int) -> tuple[int, int, int, int]:
+    arr = np.asarray(img)
+    inked = np.where(arr.min(axis=1) < 200)[0]
+    if inked.size == 0:
+        return (0, 0, img.width, img.height)
+    bottom = min(int(inked.max()) + margin * SS, img.height)
+    return (0, 0, img.width, bottom)
+
+
 def fit_page(img: Image.Image, margin: int = 70) -> Image.Image:
     """Trim the sheet to its content plus a margin.
 
     Keeps the framing close to the original `1.png`-`6.png` set, and — more
     importantly — makes page fractions meaningful: 0.5 of the sheet is now
     somewhere in the table rather than in empty paper below it.
+
+    The crop box is computed from `img`'s own ink and nowhere else -- a mask
+    replay must reuse this exact box rather than recomputing one from its own
+    (much sparser) content, or every downstream coordinate silently misaligns.
     """
-    arr = np.asarray(img)
-    inked = np.where(arr.min(axis=1) < 200)[0]
-    if inked.size == 0:
-        return img
-    bottom = min(int(inked.max()) + margin * SS, img.height)
-    return img.crop((0, 0, img.width, bottom))
+    box = _fit_page_crop_box(img, margin)
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("crop", box=box)
+    return img.crop(box)
 
 
 # --------------------------------------------------------------------------
@@ -873,14 +1208,35 @@ class Fixture:
     # Off for fixtures whose own build already places (or deliberately omits)
     # the signature, so `main()`'s auto margin-signature pass doesn't collide.
     auto_signature: bool = True
+    # Populated by `main()`'s build loop, not by `build`: the exported row/
+    # column geometry (for `manifest.json`) and the pre-photometric render
+    # (transient, for `verify()`'s ink check only -- never serialized).
+    geometry: dict[str, Any] | None = None
+    pre_photo: Image.Image | None = None
 
 
 def _finish(img: Image.Image, width: int | None = None) -> Image.Image:
     """Downsample the supersampled sheet. `width` forces a final pixel width
     (used by the deliberately low-resolution fixture) and keeps aspect."""
     if width is None:
-        return downsample(img, img.width // SS, img.height // SS)
-    return downsample(img, width, round(width * img.height / img.width))
+        w, h = img.width // SS, img.height // SS
+    else:
+        w, h = width, round(width * img.height / img.width)
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("resize", w=w, h=h)
+    return downsample(img, w, h)
+
+
+def grow_canvas(img: Image.Image, extra_h: int, fill: int = PAPER) -> Image.Image:
+    """Grow the canvas downward by `extra_h`, pasting `img` at the top --
+    used by `f26` to make room for a sign-off block below the table. A
+    geometric op (it relocates content on a larger page), logged like the
+    others so a mask/companion replay grows in step."""
+    if _ACTIVE_RECORDER is not None:
+        _ACTIVE_RECORDER.log("grow_canvas", extra_h=extra_h)
+    canvas = Image.new("L", (img.width, img.height + extra_h), fill)
+    canvas.paste(img, (0, 0))
+    return canvas
 
 
 def f07() -> tuple[Image.Image, list[Person]]:
@@ -1449,8 +1805,8 @@ def f25() -> tuple[Image.Image, list[Person]]:
         geometry_out=geom,
     )
     raw = fit_page(raw)
-    row_edges = geom["row_edges"]
-    col_edges = geom["edges"]
+    row_edges = geom["blocks"][0]["row_edges"]
+    col_edges = geom["blocks"][0]["edges"]
     target_row = 5  # Mariusz Kamiński -- the row the signature lands on
     y0, y1 = row_edges[target_row], row_edges[target_row + 1]
     x0 = col_edges[4]  # left edge of the "Adres zamieszkania" column
@@ -1473,8 +1829,7 @@ def f26() -> tuple[Image.Image, list[Person]]:
         margin=40,
     )
     extra = int(0.22 * PAGE_H * SS)
-    canvas = Image.new("L", (img.width, img.height + extra), PAPER)
-    canvas.paste(img, (0, 0))
+    canvas = grow_canvas(img, extra)
     canvas = signoff_block(
         canvas,
         y_top_frac=(img.height + int(0.03 * extra)) / canvas.height,
@@ -1513,6 +1868,13 @@ FIXTURES: list[Fixture] = [
                 "expected_rows": [8],
                 "must": "proceed without prompting",
             },
+            {
+                "query": "Anna",
+                "field": "imie",
+                "expected_matches": 4,
+                "expected_rows": [2, 4, 6, 8],
+                "must": "--field imie returns every row whose given name is exactly Anna (rows 2, 4, 6, 8), one field down from the full-name ambiguity above; still requires confirmation (FR-006)",
+            },
         ],
         build=f07,
     ),
@@ -1542,6 +1904,27 @@ FIXTURES: list[Fixture] = [
                 "expected_matches": 0,
                 "expected_rows": [],
                 "must": "surname-only query is not an exact full-name match",
+            },
+            {
+                "query": "Kowalski",
+                "field": "nazwisko",
+                "expected_matches": 2,
+                "expected_rows": [1, 6],
+                "must": "--field nazwisko exact match hits every row whose surname is exactly Kowalski (rows 1 and 6, Jan and Adam) and still excludes Kowalski-Nowak/Kowalska/Kowal/Kowalewski/Kowalczyk -- the same discrimination the unqualified full-name scenario tests, one field down; ambiguous, requires confirmation",
+            },
+            {
+                "query": BASE[0].pesel,
+                "field": "pesel",
+                "expected_matches": 1,
+                "expected_rows": [1],
+                "must": "--field pesel on a layout-A fixture matches exactly one row",
+            },
+            {
+                "query": f"{BASE[0].pesel[:6]}-{BASE[0].pesel[6:]}",
+                "field": "pesel",
+                "expected_matches": 1,
+                "expected_rows": [1],
+                "must": "PESEL comparison is digits-only on both sides -- a query typed with a separator still matches",
             },
         ],
         build=f08,
@@ -1858,7 +2241,14 @@ FIXTURES: list[Fixture] = [
                 "query": "Wójcik",
                 "expected_matches": 1,
                 "expected_rows": [4],
-                "must": "row 4 has no given name, so its full name is literally 'Wójcik' — decide and document whether a surname-only row is addressable by a surname-only query",
+                "must": "resolved: row 4 has no given name, so its full name is literally 'Wójcik' -- the unqualified (full-name) query matches it exactly, same as any other full name; --field nazwisko (below) matches it too, unambiguously, since it is the only Wójcik surname on the page",
+            },
+            {
+                "query": "Wójcik",
+                "field": "nazwisko",
+                "expected_matches": 1,
+                "expected_rows": [4],
+                "must": "resolved: --field nazwisko matches row 4 unambiguously",
             },
         ],
         build=f21,
@@ -2088,7 +2478,7 @@ def build_manifest() -> dict[str, Any]:
         },
         "contains_real_pii": False,
         "fixtures": [
-            {**entry, "generated": False, "ground_truth_rows": None}
+            {**entry, "generated": False, "ground_truth_rows": None, "geometry": None}
             for entry in ORIGINAL_SET
         ]
         + [
@@ -2104,6 +2494,7 @@ def build_manifest() -> dict[str, Any]:
                 "search_scenarios": f.scenarios,
                 "notes": f.notes or None,
                 "ground_truth_rows": _rows_for_manifest(f),
+                "geometry": f.geometry,
             }
             for f in FIXTURES
         ],
@@ -2113,12 +2504,83 @@ def build_manifest() -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-def verify() -> None:
-    """Fail loudly if a declared scenario disagrees with the rendered rows.
+def _ink_check_ruled(fixture: Fixture) -> list[str]:
+    """3's ink check: each ruled fixture's exported boundary must sit on ink
+    in the pre-photometric render -- the geometric chain's own output, before
+    contrast/JPEG/lighting/etc touch it. Sampling the *final* image instead
+    would be wrong two ways at once: 24.png's contrast+JPEG crush erases any
+    fixed brightness threshold's meaning, and 12.png's dark scanner border
+    would pass a boundary near the page edge for the wrong reason. A loose,
+    relative check against the saved final PNG is kept alongside as a sanity
+    floor only -- it must not be blank paper."""
+    problems: list[str] = []
+    assert fixture.pre_photo is not None
+    assert fixture.geometry is not None
+    pre = np.asarray(fixture.pre_photo)
+    h, w = pre.shape[:2]
+    final = np.asarray(Image.open(OUT_DIR / fixture.filename).convert("L"))
+    for t_idx, table in enumerate(fixture.geometry["tables"]):
+        for kind in ("row_edges", "col_edges"):
+            for e_idx, edge in enumerate(table[kind]):
+                if edge["clipped"] or not edge["points"]:
+                    continue
+                samples = [
+                    int(pre[min(max(y, 0), h - 1), min(max(x, 0), w - 1)])
+                    for x, y in edge["points"]
+                ]
+                mean_val = sum(samples) / len(samples)
+                if mean_val > 180:
+                    problems.append(
+                        f"{fixture.filename}: table {t_idx} {kind}[{e_idx}] mean "
+                        f"pre-photometric brightness {mean_val:.0f} looks like "
+                        "paper, not a rule"
+                    )
+                fx, fy = edge["points"][len(edge["points"]) // 2]
+                in_bounds = 0 <= fy < final.shape[0] and 0 <= fx < final.shape[1]
+                if in_bounds and int(final[fy, fx]) > 250:
+                    problems.append(
+                        f"{fixture.filename}: table {t_idx} {kind}[{e_idx}] "
+                        f"final-image pixel at ({fx},{fy}) reads as blank "
+                        "paper (loose sanity check)"
+                    )
+    return problems
 
-    The scenarios are the reason this fixture set is worth anything, so a
-    scenario that quietly stops matching its own image is worse than no
-    scenario at all. Runs after every generation.
+
+def _text_bracket_check_borderless(fixture: Fixture) -> list[str]:
+    """16.png has no rules by construction (`block.grid = False`) -- there is
+    no rule line to sample, so each exported row band is instead checked for
+    containing ink at all in the pre-photometric render."""
+    problems: list[str] = []
+    assert fixture.pre_photo is not None
+    assert fixture.geometry is not None
+    arr = np.asarray(fixture.pre_photo)
+    h = arr.shape[0]
+    for table in fixture.geometry["tables"]:
+        row_edges = table["row_edges"]
+        for i in range(len(row_edges) - 1):
+            top, bottom = row_edges[i], row_edges[i + 1]
+            if not top["points"] or not bottom["points"]:
+                continue
+            y0 = int(sum(p[1] for p in top["points"]) / len(top["points"]))
+            y1 = int(sum(p[1] for p in bottom["points"]) / len(bottom["points"]))
+            y0, y1 = max(0, y0), min(h, y1)
+            if y1 <= y0:
+                continue
+            band = arr[y0:y1, :]
+            if band.size == 0 or int(band.min()) >= 200:
+                problems.append(
+                    f"{fixture.filename}: row band {i} ({y0}-{y1}) has no ink"
+                )
+    return problems
+
+
+def verify() -> None:
+    """Fail loudly if a declared scenario disagrees with the rendered rows,
+    or if exported geometry disagrees with the rendered image.
+
+    The scenarios and geometry are the reason this fixture set is worth
+    anything, so either one quietly drifting from its own image is worse
+    than no oracle at all. Runs after every generation.
     """
     problems: list[str] = []
     for fixture in FIXTURES:
@@ -2129,7 +2591,7 @@ def verify() -> None:
                 (
                     sc["expected_matches"]
                     for sc in fixture.scenarios
-                    if sc["query"] == name
+                    if sc["query"] == name and "field" not in sc
                 ),
                 default=None,
             )
@@ -2139,6 +2601,8 @@ def verify() -> None:
                     f"scenario declares it ambiguous"
                 )
         for sc in fixture.scenarios:
+            if sc.get("field") is not None:
+                continue  # field-scoped scenarios are checked below, by role
             hits = [p.lp for p in fixture.people if p.full_name == sc["query"]]
             declared = [str(r) for r in sc["expected_rows"]]
             if hits != declared or len(hits) != sc["expected_matches"]:
@@ -2147,15 +2611,54 @@ def verify() -> None:
                     f"{sc['expected_matches']}{declared}, image has "
                     f"{len(hits)}{hits}"
                 )
+        for sc in fixture.scenarios:
+            field = sc.get("field")
+            if field is None:
+                continue
+            digits_only = field == "pesel"
+            query = (
+                "".join(ch for ch in sc["query"] if ch.isdigit())
+                if digits_only
+                else sc["query"]
+            )
+            hits = []
+            for p in fixture.people:
+                if field == "nazwisko":
+                    value = p.nazwisko
+                elif field == "imie":
+                    value = p.imie
+                elif field == "pesel":
+                    value = p.pesel
+                else:
+                    raise ValueError(f"unknown scenario field: {field!r}")
+                if digits_only:
+                    value = "".join(ch for ch in value if ch.isdigit())
+                if value and value == query:
+                    hits.append(p.lp)
+            declared = [str(r) for r in sc["expected_rows"]]
+            if hits != declared or len(hits) != sc["expected_matches"]:
+                problems.append(
+                    f"{fixture.filename}: --field {field} query {sc['query']!r} "
+                    f"declares {sc['expected_matches']}{declared}, image has "
+                    f"{len(hits)}{hits}"
+                )
+        if fixture.geometry is not None:
+            if fixture.filename == "16.png":
+                problems.extend(_text_bracket_check_borderless(fixture))
+            else:
+                problems.extend(_ink_check_ruled(fixture))
     if problems:
         joined = "\n  ".join(problems)
         raise SystemExit(f"manifest/image mismatch:\n  {joined}")
-    print("verify: every search scenario agrees with the rendered rows")
+    print(
+        "verify: every search scenario and every exported boundary agrees with the rendered image"
+    )
 
 
 def main() -> None:
     for fixture in FIXTURES:
-        img, rows = fixture.build()
+        with _recording() as recorder:
+            img, rows = fixture.build()
         if fixture.auto_signature:
             seed = int(fixture.filename.removesuffix(".png"))
             img = margin_signature(img, seed=seed)
@@ -2165,6 +2668,9 @@ def main() -> None:
         fixture.size_px = (img.width, img.height)
         path = OUT_DIR / fixture.filename
         img.convert("L").save(path, format="PNG", optimize=True)
+        geometry, pre_photo = _export_geometry(recorder)
+        fixture.geometry = geometry
+        fixture.pre_photo = pre_photo
         print(f"{fixture.filename:>8}  {img.width}x{img.height}  {fixture.title}")
 
     verify()

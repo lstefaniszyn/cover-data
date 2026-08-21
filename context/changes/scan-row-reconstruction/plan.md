@@ -672,15 +672,15 @@ Phase 3 rewrites `manifest.json` through the generator. The additions are additi
 
 #### Automated
 
-- [ ] 1.1 Every relative link and file path referenced by the edited foundation documents resolves to something that exists
-- [ ] 1.2 No reference to `context/changes/testing-fixture-foundation/` remains anywhere under `context/`
-- [ ] 1.3 No document under `context/foundation/` still describes the fixture set as six files
+- [x] 1.1 Every relative link and file path referenced by the edited foundation documents resolves to something that exists
+- [x] 1.2 No reference to `context/changes/testing-fixture-foundation/` remains anywhere under `context/`
+- [x] 1.3 No document under `context/foundation/` still describes the fixture set as six files
 
 #### Manual
 
-- [ ] 1.4 FR-004 and FR-005 read as a contract an implementer could build S-02 from without asking a follow-up question
-- [ ] 1.5 Each amended FR carries a `> Socrates:` note, matching the file's existing convention
-- [ ] 1.6 The column-role vocabulary in `CLAUDE.md` matches the header text actually rendered by layouts A, B and C
+- [x] 1.4 FR-004 and FR-005 read as a contract an implementer could build S-02 from without asking a follow-up question
+- [x] 1.5 Each amended FR carries a `> Socrates:` note, matching the file's existing convention
+- [x] 1.6 The column-role vocabulary in `CLAUDE.md` matches the header text actually rendered by layouts A, B and C
 
 ### Phase 2: Python 3.13 migration and offline OCR stack
 

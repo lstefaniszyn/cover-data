@@ -6,7 +6,7 @@
 >
 > Refresh: re-run `/10x-test-plan --refresh` when stale (see §8).
 >
-> Last updated: 2026-08-20
+> Last updated: 2026-08-21
 
 ## 1. Strategy
 
@@ -69,58 +69,90 @@ deserves emphasis: this rollout is itself the most likely cause of it,
 because hand-labelling real distorted scans necessarily puts real debtor
 data into the working tree of a repository that has a remote.
 
-### Fixture set (assessed 2026-08-20)
+### Fixture set (assessed 2026-08-21, supersedes the 2026-08-20 six-fixture assessment)
 
-Six sample scans exist at `context/test_images/` — a deliberate distortion
-ladder, one page each, eight debtor rows per page:
+26 fixtures now exist at `context/test_images/`, indexed by `manifest.json` —
+the authoritative identity source (see finding 4). Two generations, with
+different evidentiary weight:
 
-| File | Label | Distortion exercised | Column layout |
+| Generation | Files | Origin | Ground truth |
 |---|---|---|---|
-| `1.png` | Przykład 1 | clean, slightly tilted | **A** — `Lp.` + split name (6 cols) |
-| `2.png` | Przykład 2 | shadows, uneven lighting | **B** — `Lp.` + merged name (5 cols) |
-| `3.png` | Przykład 3 | page waviness | **A** — `Lp.` + split name (6 cols) |
-| `4.png` | Przykład 4 | low quality, blur and noise | **B** — `Lp.` + merged name (5 cols) |
-| `5.png` | Przykład 5 | columns cut off at the right edge | **C** — no `Lp.`, split name (5 cols), last column truncated |
-| `6.png` | Przykład 6 | scan lines and artifacts | **B** — `Lp.` + merged name (5 cols) |
+| Original | `1.png`–`6.png` | image model, committed `3f451c5` | none — `ground_truth_rows: null`, never hand-labelled |
+| Generated | `7.png`–`26.png` | `generate_edge_cases.py` | exact by construction — every cell value, plus exact warped row/column geometry (added by `scan-row-reconstruction` Phase 3) |
 
-Five findings, which the risk map above already reflects:
+The original six remain the distortion ladder previously described here —
+tilt (`1.png`), lighting/shadows (`2.png`), waviness (`3.png`), blur/noise
+(`4.png`), cut-off columns (`5.png`), scan lines (`6.png`); eight debtor rows
+each. They predate the PESEL column and the signature elements every
+generated fixture carries (see finding 6) and are not regenerable.
 
-1. **The set is synthetic and carries no real PII** — placeholder names and
-   generic addresses. It can be committed. This is why Risk #3's likelihood
-   is downgraded to Medium: only its temp-artifact and error-output halves
-   remain live, and Risk #3 now ranks below Risk #4 despite its row
-   position (numbers are stable by schema rule and are not renumbered).
-2. **The set does not close the PRD's blocking open question**, which asks
-   for a *real* representative distorted scan "rather than a clean
-   synthetic one." Risks #1 and #2 can be exercised against this set but
-   cannot be *closed* by it.
-3. **The column schema is not stable across the set — three variants, not
-   one.** **A** (`Lp.` + split given/family name, 6 columns): `1.png`,
-   `3.png`. **B** (`Lp.` + merged name, 5 columns): `2.png`, `4.png`,
-   `6.png`. **C** (no `Lp.`, split name, 5 columns, last column truncated):
-   `5.png` alone. The PRD scopes v1 to one representative layout, so
-   **this is a blocking decision for §3 Phase 1** — it defines what correct
-   row reconstruction means before any ground truth can be labelled.
-   Note the cost asymmetry: choosing B yields the most fixtures (three) but
-   discards both `3.png` (the only waviness sample) and `5.png` (the
-   sharpest test of Risks #1 and #2, see finding 5), so it is the option
-   with the most fixtures and the least test value. A third reading is open
-   — that "one layout" means a family of bordered debtor tables with
-   per-document column detection rather than a fixed column schema, which
-   keeps all six samples in scope at the cost of harder cell attribution
-   and a harder FR-005 name match.
-4. **Fixture identity should come from an explicit manifest, not from the
-   filename.** The set originally shipped as `1.png`–`5.png` plus `7.png`,
-   with `7.png` labelled "Przykład 6" and no `6.png` at all; the gap was
-   closed by renaming to `6.png` in `3f451c5`. Filename-derived identity
-   was already wrong once here, and the in-page "Przykład N" title is the
-   authoritative label.
-5. **`5.png` is the sharpest available test of Risks #1 and #2**, because
-   its last column runs off the page edge: a band computed from detected
-   *content* extent rather than *page* extent stops short and leaves
-   truncated text exposed. Conversely the waviness in `3.png` is mild, so
-   the core wavy-geometry risk is under-exercised by this set — a further
-   argument for finding a real distorted scan (finding 2).
+The generated twenty are deliberate edge cases, each targeting a named
+failure scenario from the risk map above and carrying its rationale in the
+manifest's `why_this_edge_case`; each also declares `search_scenarios`
+(query, expected match count, expected row indices, a `must` note) — 24 in
+total across the set. Directly relevant to the risk table: `11.png` (19px
+waviness, sharper than `3.png`'s mild case), `16.png` (no ruling lines at
+all — row finding must not depend on rules), `18.png` (26 rows, bottom-edge
+truncation — the vertical twin of `5.png`), `23.png` (two tables on one
+page, both numbered from 1), `24.png` (pale photocopy + JPEG q30, for Risk
+#4), and `22.png`/`25.png` (a stamp and a stray signature crossing into the
+table). Full per-fixture inventory: `context/test_images/README.md`.
+
+Column layout is a family of three, spanning both generations — **A**
+(`Lp.` + split `Imię`/`Nazwisko`, plus `PESEL` on every generated fixture):
+`1.png`, `3.png`, and most of `7.png`–`26.png`. **B** (`Lp.` + merged
+`Imię i nazwisko`, plus `PESEL`): `2.png`, `4.png`, `6.png`, and a subset of
+the generated set. **C** (no `Lp.`, split name, plus `PESEL`): `5.png` and a
+subset of the generated set. PRD Open Question #2 is now resolved as
+per-document column detection over this family, not a fixed schema — see
+`context/foundation/prd.md` Open Questions.
+
+Six findings, which the risk map above already reflects:
+
+1. **The set is synthetic and carries no real PII** — placeholder names,
+   generic addresses, fictional creditors, and PESELs that are
+   checksum-valid but deterministically fictitious. It can be committed.
+   This is why Risk #3's likelihood is downgraded to Medium: only its
+   temp-artifact and error-output halves remain live, and Risk #3 ranks
+   below Risk #4 despite its row position (numbers are stable by schema
+   rule and are not renumbered).
+2. **Even the generated twenty do not close the PRD's blocking open
+   question**, which asks for a *real* representative distorted scan
+   "rather than a clean synthetic one." However exact its ground truth, no
+   generator reproduces real ink bleed, print degradation, or scanner
+   optics. Risks #1 and #2 can be exercised against this set but cannot be
+   *closed* by it.
+3. **Resolved 2026-08-21 — the column schema is not stable across the set,
+   three variants, not one, and this is no longer a blocking decision.**
+   PRD Open Question #2 settled it as a family of bordered debtor tables
+   with per-document column detection, keeping layouts A, B and C (see
+   above) all in scope at the cost of harder cell attribution — the
+   `scan-row-reconstruction` plan's Phase 5 column-role resolution. §3
+   Phase 1 below no longer gates on this question; it is corrected to
+   reflect that.
+4. **Satisfied — fixture identity comes from `manifest.json`, not the
+   filename.** The set was already renamed once (`3f451c5`) to fix a
+   filename/label mismatch; every generated fixture's edge-case identity,
+   content ground truth, and (as of Phase 3) geometry ground truth is
+   manifest-driven. `scan-row-reconstruction` Phase 3 adds a manifest-reading
+   `tests/conftest.py` so tests get this the same way, rather than deriving
+   anything from filenames.
+5. **`5.png` is the sharpest available test of Risks #1 and #2 among the
+   originals**, because its last column runs off the page edge: a band
+   computed from detected *content* extent rather than *page* extent stops
+   short and leaves truncated text exposed. `18.png` is now its generated,
+   exact-ground-truth counterpart on the vertical axis (bottom-edge
+   truncation), and `11.png` supersedes `3.png` as the sharpest waviness
+   case — a further argument that finding a real distorted scan (finding
+   2) still matters more than adding synthetic severity.
+6. **`1.png`–`6.png` are second-class and will stay that way.** No PESEL
+   column, no signatures, no exact ground truth, and the generator never
+   touches them (`generate_edge_cases.py` only produces `7.png` onward).
+   They are kept as the only non-script samples, verified structurally only
+   (a table is found, column roles resolve, rows are non-overlapping) —
+   never by content or extent comparison, since no oracle exists for
+   either. See `context/changes/scan-row-reconstruction/plan.md` "Testing
+   Strategy".
 
 Risk #7 sits at Low-Medium likelihood and is retained rather than dropped
 because the PRD makes it a distinct testable requirement (FR-009) precisely
@@ -149,7 +181,7 @@ orchestrator updates Status as artifacts appear on disk.
 
 | # | Phase name | Goal (one line) | Risks covered | Test types | Status | Change folder |
 |---|---|---|---|---|---|---|
-| 1 | Fixture foundation | Settle the one-layout question, then hand-label row-extent ground truth over `context/test_images/` and keep the door shut for real scans arriving later | #3 | fixture manifest + labelling, repo + CI gate, cleanup integration | change opened | `context/changes/testing-fixture-foundation/` |
+| 1 | Fixture foundation | Export exact row/column geometry through the fixture generator's distortion chain into `manifest.json`, and keep the door shut for real scans arriving later | #3 | fixture manifest + generator-exported geometry, repo + CI gate, cleanup integration | change opened | `context/changes/scan-row-reconstruction/` (Phase 3) |
 | 2 | Row-extent ground truth | Prove the redaction band matches the true row boundary on both edges simultaneously, on real distorted scans | #1, #2 | integration over fixtures, `slow`-marked | not started | — |
 | 3 | Confidence-flag propagation | Prove sub-threshold OCR fragments are surfaced and never silently used as the basis of a match or boundary | #4 | unit on synthetic fragments, one CLI-boundary assertion | not started | — |
 | 4 | Guardrail suite | Prove true pixel overwrite, no silent auto-pick, and source immutability, including on failure paths | #5, #6, #7 | file-level output assertions, CLI tests with simulated input, hash checks | not started | — |
@@ -158,9 +190,11 @@ orchestrator updates Status as artifacts appear on disk.
 Phase ordering rationale, one line each:
 
 - **Phase 1 first** because nothing later can be tested honestly without
-  independent ground truth, labelling cannot start until the one-layout
-  question is settled (see "Fixture set" in §2, finding 3), and it is the
-  only phase whose cost is dominated by human labelling rather than code.
+  independent ground truth. The one-layout question that used to block this
+  (see "Fixture set" in §2, finding 3) is resolved; the ground truth is now
+  generator-exported geometry rather than hand-labelling, produced by
+  `scan-row-reconstruction` Phase 3 before any row-reconstruction code
+  exists, so the oracle still cannot be derived from the code it will judge.
 - **Phase 2 second** because #1 and #2 are the highest impact × likelihood
   pair, three interview answers converge on them, and they test the
   assumption the entire product rests on. Maps to roadmap slice S-01
@@ -190,8 +224,8 @@ The classic test base for this project. AI-native tools (if any) carry a
 | CLI invocation | `typer.testing.CliRunner` | Typer 0.27.1 | Already in use. Simulated stdin is the supported way to drive `typer.confirm` / `typer.prompt`, which is what Risk #6 needs |
 | type checking | mypy (strict) | 2.3.1 | `strict = true`, `files = ["src"]`. Load-bearing rather than cosmetic here: the OCR-fragment → cell → row → person relationship is the project's core invariant, and an untyped dict hides a shape mismatch until runtime |
 | lint + format | ruff | 0.16.3 | Vendored agent tooling excluded via `extend-exclude` |
-| scan fixtures | six synthetic PNGs at `context/test_images/` | — | A distortion ladder (tilt, lighting, waviness, blur/noise, cut-off columns, artifacts), 8 rows each, no real PII. Untracked as of 2026-08-20. See "Fixture set" in §2 for the layout-instability and filename findings |
-| ground-truth labelling | none yet — see §3 Phase 1 | — | The predecessor program supplies no data (not runnable, no saved output), so expected row extents must be hand-labelled — roughly 48 row bands across the six fixtures. This is the rollout's most expensive and most load-bearing asset |
+| scan fixtures | 26 synthetic PNGs at `context/test_images/`, indexed by `manifest.json` | — | `1.png`–`6.png`: a distortion ladder (tilt, lighting, waviness, blur/noise, cut-off columns, artifacts), 8 rows each, no ground truth, no real PII. `7.png`–`26.png`: generator-produced edge cases with exact content ground truth and (per Phase 1 of `scan-row-reconstruction`) exact geometry. See "Fixture set" in §2 |
+| ground-truth labelling | generator-exported, not hand-labelled — see §3 Phase 1 | — | The predecessor program supplies no data (not runnable, no saved output); rather than hand-labelling, `scan-row-reconstruction` Phase 3 threads exact row/column edges through the fixture generator's own distortion chain, yielding exact geometry for 20 fixtures independently of any row-reconstruction code |
 | image + PDF assertions | none yet — see §3 Phase 2 and Phase 4 | — | PyMuPDF exposes page-level text extraction, embedded-image enumeration, and pixmap rendering — three independent deterministic oracles for Risk #5, so no vision model is warranted. Library choice is not yet committed; confirm during Phase 2 research |
 | OCR engine | none yet — see roadmap S-01 | — | Must be local: `tech-stack.md` records an explicit avoid on hosted OCR APIs because debtor PII must not leave the device |
 | dependency audit | none yet — see §3 Phase 5 | — | `pip-audit` fails on this network's TLS-inspecting proxy because it uses its own HTTP client rather than the system trust store; GitHub-hosted runners are not behind that proxy, so the gate belongs in CI |

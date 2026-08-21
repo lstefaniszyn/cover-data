@@ -18,11 +18,11 @@ Where the brief and the PRD disagree, **the PRD wins**. The brief assumes a web 
 
 Scaffolded, with one commit (`init project`) behind it. `uv init` produced a src-layout package:
 
-- `src/cover_data/__init__.py` — the only source file; empty of logic.
-- `pyproject.toml` — `requires-python = ">=3.14"`, uv_build backend, and a `cover-data = "cover_data:main"` console script that points at a `main` **which does not exist yet**.
-- `uv.lock` + `.venv/` — 15 packages, Python 3.14.7.
+- `src/cover_data/__init__.py` — `main()` calling `app()`; `src/cover_data/cli.py` wires `inspect`/`search`/`redact` as stubs.
+- `pyproject.toml` — `requires-python = ">=3.14"` today. Per `tech-stack.md`'s OCR engine decision this moves to `>=3.13` during `scan-row-reconstruction` (S-01) Phase 2, because `paddlepaddle`'s wheels stop at `cp313`; the downgrade is inert (no 3.14-only feature is used).
+- `uv.lock` + `.venv/` — 15 packages, Python 3.14.7 today; recreate `.venv/` (`uv sync --locked`) after the 3.13 pin lands, or a stale 3.14 venv produces confusing failures.
 
-`typer` is the runtime dependency (`fastapi`/`uvicorn`, once installed as surplus, have been removed — see Stack below). `ruff`, `mypy`, and `pytest` are installed as dev dependencies, and `lefthook.yml` gates commits on all three.
+`typer` is the only runtime dependency today (`fastapi`/`uvicorn`, once installed as surplus, have been removed — see Stack below). `scan-row-reconstruction` Phase 2 adds PaddleOCR — local, offline, model weights pre-placed in a git-ignored `models/` directory and never fetched at inference (`uv add --system-certs "paddleocr[doc-parser]" paddlepaddle`; ~97 resolved packages, no `torch`). `ruff`, `mypy`, and `pytest` are installed as dev dependencies, and `lefthook.yml` gates commits on all three.
 
 **Always run through the local `.venv`.** Prefix commands with `uv run`, which resolves it automatically. Never call system Python, `pip`, or a bare `pytest`/`ruff`/`mypy` — `C:\Python314` is first on PATH and is not this project's interpreter. Activating the venv in a shell doesn't help across tool calls, since each Bash invocation gets a fresh environment.
 
@@ -92,9 +92,11 @@ These come from the PRD and are the reason the project exists. Violating one sil
 - **PII must not leave the device.** Hosted OCR APIs (Textract, Document AI, Azure) are excluded by an explicit avoid recorded in the stack decision. Local OCR only.
 - **Temporary artifacts are cleaned up** once the operation that created them completes.
 
-MVP boundaries that are deliberate, not oversights: image file input only (no PDF ingestion — that is a named fast-follow), exact-match search only, one document layout, no auth, no multi-user, printed text only.
+MVP boundaries that are deliberate, not oversights: image file input only (no PDF ingestion — that is a named fast-follow), exact-match search only, a family of bordered debtor-table layouts with per-document column detection (not a single fixed schema — PRD Open Question #2, resolved 2026-08-21), no auth, no multi-user, printed text only.
 
-**Blocking open question:** whether a real representative distorted scan exists to build and validate row reconstruction against. A clean synthetic sample cannot validate FR-003 or the exact-match assumption in FR-005 — those are precisely the requirements that fail on wavy geometry.
+**Searchable fields (FR-004).** A query is matched against `Imię`, `Nazwisko`, `Imię i nazwisko`, or `PESEL`, selected via an explicit `--field` option that defaults to full name when omitted — a documented default, not shape-based auto-detection. PESEL comparison is digits-only on both sides; a checksum failure is never a rejection, only evidence of possible OCR error. S-01 delivers the column-role vocabulary this depends on: `lp`, `imie`, `nazwisko`, `imie_i_nazwisko`, `pesel`, `adres`, `kwota`, `wierzyciel`, plus `unknown` for a header that doesn't resolve — matching the header text actually rendered across the three layouts: **A** renders `Lp.` / `Imię` / `Nazwisko` / `PESEL` / `Adres zamieszkania` / `Kwota zadłużenia (PLN)` / `Wierzyciel`; **B** renders `Lp.` / `Imię i nazwisko` / `PESEL` / `Adres` / `Kwota zadłużenia (PLN)` / `Wierzyciel`; **C** renders `Imię` / `Nazwisko` / `PESEL` / `Adres` / `Kwota zadłużenia (PLN)` / `Wierzyciel` — split name like A but no `Lp.`, and `Adres` (not `Adres zamieszkania`) like B.
+
+**Blocking open question:** whether a real representative distorted scan exists to build and validate row reconstruction against. A clean synthetic sample cannot validate FR-003 or the exact-match assumption in FR-005 — those are precisely the requirements that fail on wavy geometry. **Fixture-set reality (2026-08-21):** `context/test_images/` now holds 26 fixtures indexed by `manifest.json` — `1.png`–`6.png` (image-model output, no ground truth, no PESEL column) and `7.png`–`26.png` (script-generated, exact-by-construction row content and, per `scan-row-reconstruction` Phase 3, exact warped geometry). The generated set is more controlled than the originals — exact ground truth, but still one generator's idea of a scan — so it narrows but does not close this question. See `context/foundation/test-plan.md` §2.
 
 ## The context/ workflow
 
@@ -124,7 +126,15 @@ uv run mypy src                            # once mypy is a dev dependency
 uv lock --check                            # verify uv.lock matches pyproject.toml
 ```
 
-`ruff` 0.16.3, `mypy` 2.3.1, and `pytest` 9.1.1 are installed as dev dependencies. `[tool.ruff] extend-exclude` in `pyproject.toml` keeps linting off the vendored agent tooling in `.github/`, `.agents/`, `.codex/`, and `.claude/` — without it `ruff check .` fails on scripts this project doesn't own.
+`ruff` 0.16.3, `mypy` 2.3.1, and `pytest` 9.1.1 are installed as dev dependencies. `[tool.ruff] extend-exclude` in `pyproject.toml` keeps linting off the vendored agent tooling in `.github/`, `.agents/`, `.codex/`, and `.claude/` — without it `ruff check .` fails on scripts this project doesn't own. `pytest -m 'not slow'` is the pre-commit gate; the `slow` marker (registered in `pyproject.toml`) is for fixture-heavy OCR or full-page redaction tests and only runs on pre-push/CI/release.
+
+The fixture generator at `context/test_images/generate_edge_cases.py` is fixture tooling, not product code, and deliberately stays outside the project's dependency graph:
+
+```bash
+uv run --with pillow --with numpy --no-project python context/test_images/generate_edge_cases.py
+```
+
+OCR model weights live in a git-ignored `models/` directory, provisioned locally before any test that touches the real engine — provisioning steps land with the dependency stack in `scan-row-reconstruction` Phase 2.
 
 ## MCP
 

@@ -25,6 +25,7 @@ Add `--system-certs` to the `uv run` if the TLS-inspecting proxy is in play.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Callable, Sequence
@@ -56,6 +57,34 @@ INK = 25
 # --------------------------------------------------------------------------
 
 
+def _seed_from(key: str) -> int:
+    return int.from_bytes(hashlib.sha256(key.encode("utf-8")).digest()[:8], "big")
+
+
+def _pesel_checksum(digits10: str) -> int:
+    weights = (1, 3, 7, 9, 1, 3, 7, 9, 1, 3)
+    total = sum(int(d) * w for d, w in zip(digits10, weights, strict=True))
+    return (10 - total % 10) % 10
+
+
+def make_pesel(key: str, female: bool) -> str:
+    """A checksum-valid but entirely fictitious PESEL, deterministic per `key`.
+
+    Same algorithm real PESELs use (11 digits, weighted-sum check digit) so it
+    looks and validates like the real thing without being drawn from any real
+    person's actual number.
+    """
+    rng = np.random.default_rng(_seed_from(key))
+    year = int(rng.integers(1945, 2006))
+    month = int(rng.integers(1, 13))
+    day = int(rng.integers(1, 29))
+    month_encoded = month + (20 if year >= 2000 else 0)
+    seq = int(rng.integers(0, 1000))
+    sex_digit = int(rng.integers(0, 5)) * 2 + (0 if female else 1)
+    digits10 = f"{year % 100:02d}{month_encoded:02d}{day:02d}{seq:03d}{sex_digit}"
+    return digits10 + str(_pesel_checksum(digits10))
+
+
 @dataclass(frozen=True)
 class Person:
     """One debtor row, layout-independent."""
@@ -66,6 +95,14 @@ class Person:
     adres: tuple[str, ...]
     kwota: str
     wierzyciel: tuple[str, ...]
+    pesel: str = field(default="", init=False)
+
+    def __post_init__(self) -> None:
+        if not self.imie and not self.nazwisko:
+            return
+        key = f"{self.imie}|{self.nazwisko}|{self.adres}|{self.kwota}"
+        female = self.imie.endswith("a")
+        object.__setattr__(self, "pesel", make_pesel(key, female))
 
     @property
     def full_name(self) -> str:
@@ -94,20 +131,23 @@ def _cell(value: str | Sequence[str]) -> tuple[str, ...]:
 
 
 def layout_a(people: Sequence[Person]) -> Block:
-    """`Lp.` + split given/family name, 6 columns (as in `1.png`, `3.png`)."""
+    """`Lp.` + split given/family name + PESEL, 7 columns (as in `1.png`, `3.png`
+    plus the PESEL column added for every generated fixture)."""
     columns = [
-        Column(("Lp.",), 0.06, "center"),
-        Column(("Imię",), 0.12, "left"),
-        Column(("Nazwisko",), 0.17, "left"),
-        Column(("Adres zamieszkania",), 0.29, "left"),
-        Column(("Kwota", "zadłużenia", "(PLN)"), 0.16, "right"),
-        Column(("Wierzyciel",), 0.20, "left"),
+        Column(("Lp.",), 0.05, "center"),
+        Column(("Imię",), 0.10, "left"),
+        Column(("Nazwisko",), 0.14, "left"),
+        Column(("PESEL",), 0.12, "center"),
+        Column(("Adres zamieszkania",), 0.24, "left"),
+        Column(("Kwota", "zadłużenia", "(PLN)"), 0.14, "right"),
+        Column(("Wierzyciel",), 0.21, "left"),
     ]
     rows = [
         [
             _cell(p.lp),
             _cell(p.imie),
             _cell(p.nazwisko),
+            _cell(p.pesel),
             _cell(p.adres),
             _cell(p.kwota),
             _cell(p.wierzyciel),
@@ -118,18 +158,21 @@ def layout_a(people: Sequence[Person]) -> Block:
 
 
 def layout_b(people: Sequence[Person]) -> Block:
-    """`Lp.` + merged name, 5 columns (as in `2.png`, `4.png`, `6.png`)."""
+    """`Lp.` + merged name + PESEL, 6 columns (as in `2.png`, `4.png`, `6.png`
+    plus the PESEL column added for every generated fixture)."""
     columns = [
-        Column(("Lp.",), 0.06, "center"),
-        Column(("Imię i nazwisko",), 0.25, "left"),
-        Column(("Adres",), 0.29, "left"),
-        Column(("Kwota", "zadłużenia", "(PLN)"), 0.17, "right"),
+        Column(("Lp.",), 0.05, "center"),
+        Column(("Imię i nazwisko",), 0.20, "left"),
+        Column(("PESEL",), 0.12, "center"),
+        Column(("Adres",), 0.25, "left"),
+        Column(("Kwota", "zadłużenia", "(PLN)"), 0.15, "right"),
         Column(("Wierzyciel",), 0.23, "left"),
     ]
     rows = [
         [
             _cell(p.lp),
             _cell(p.full_name),
+            _cell(p.pesel),
             _cell(p.adres),
             _cell(p.kwota),
             _cell(p.wierzyciel),
@@ -140,18 +183,21 @@ def layout_b(people: Sequence[Person]) -> Block:
 
 
 def layout_c(people: Sequence[Person]) -> Block:
-    """No `Lp.`, split name, 5 columns (as in `5.png`)."""
+    """No `Lp.`, split name + PESEL, 6 columns (as in `5.png` plus the PESEL
+    column added for every generated fixture)."""
     columns = [
-        Column(("Imię",), 0.15, "left"),
-        Column(("Nazwisko",), 0.19, "left"),
-        Column(("Adres",), 0.31, "left"),
-        Column(("Kwota", "zadłużenia", "(PLN)"), 0.16, "right"),
+        Column(("Imię",), 0.13, "left"),
+        Column(("Nazwisko",), 0.16, "left"),
+        Column(("PESEL",), 0.12, "center"),
+        Column(("Adres",), 0.26, "left"),
+        Column(("Kwota", "zadłużenia", "(PLN)"), 0.14, "right"),
         Column(("Wierzyciel",), 0.19, "left"),
     ]
     rows = [
         [
             _cell(p.imie),
             _cell(p.nazwisko),
+            _cell(p.pesel),
             _cell(p.adres),
             _cell(p.kwota),
             _cell(p.wierzyciel),
@@ -221,8 +267,16 @@ def render_page(
     style: Style | None = None,
     page_w: int = PAGE_W,
     page_h: int = PAGE_H,
+    geometry_out: dict[str, Any] | None = None,
 ) -> Image.Image:
-    """Render the page at SS times scale; callers downsample after warping."""
+    """Render the page at SS times scale; callers downsample after warping.
+
+    `geometry_out`, if given, is filled with the last block's column edges
+    (`"edges"`) and row edges (`"row_edges"`), in the same SS-scale pixel
+    space as the returned image -- lets a caller target a specific cell
+    (e.g. to land a signature squarely inside one row) without re-deriving
+    the table layout by eye.
+    """
     style = style or Style()
     img = Image.new("L", (page_w * SS, page_h * SS), PAPER)
     draw = ImageDraw.Draw(img)
@@ -284,6 +338,10 @@ def render_page(
                 draw.line([(edges[0], ry), (edges[-1], ry)], fill=INK, width=gw)
             for ex in edges:
                 draw.line([(ex, table_y0), (ex, row_edges[-1])], fill=INK, width=gw)
+
+        if geometry_out is not None:
+            geometry_out["edges"] = edges
+            geometry_out["row_edges"] = row_edges
 
         y += 46 * SS
 
@@ -494,6 +552,154 @@ def handwriting(img: Image.Image, seed: int) -> Image.Image:
     return out
 
 
+INITIALS_POOL: list[str] = [
+    "M.W.",
+    "A.K.",
+    "P.N.",
+    "T.S.",
+    "K.L.",
+    "R.B.",
+    "J.O.",
+    "D.M.",
+    "E.C.",
+    "G.P.",
+    "H.Z.",
+    "I.F.",
+    "B.G.",
+    "N.R.",
+    "S.T.",
+    "U.J.",
+    "W.D.",
+    "Z.A.",
+    "L.K.",
+    "O.W.",
+]
+
+
+def initials(
+    img: Image.Image,
+    text: str,
+    at: tuple[float, float],
+    seed: int,
+    size_frac: float = 0.026,
+) -> Image.Image:
+    """A short handwritten-style initialed signature, e.g. a caseworker
+    initialing a page with 'M.W.' -- deliberately terser than `handwriting()`,
+    which is a full annotation line."""
+    out = img.convert("L")
+    w, h = out.width, out.height
+    rng = np.random.default_rng(seed)
+    font = ImageFont.truetype(FONT_ITALIC, max(10, int(size_frac * h)))
+    d = ImageDraw.Draw(out)
+    x = int(at[0] * w)
+    y = int(at[1] * h)
+    tw = int(d.textlength(text, font=font))
+    d.text((x, y), text, font=font, fill=80)
+    pts = []
+    n = 12
+    for i in range(n):
+        t = i / (n - 1)
+        px = x - 3 + t * (tw + 8)
+        py = y + font.size * 0.9 + 3 * math.sin(t * 6.0) + rng.normal(0, 1.1)
+        pts.append((px, py))
+    d.line(pts, fill=80, width=2, joint="curve")
+    return out
+
+
+def _content_bottom(img: Image.Image) -> int:
+    arr = np.asarray(img.convert("L"))
+    inked = np.where(arr.min(axis=1) < 200)[0]
+    return int(inked.max()) if inked.size else 0
+
+
+def margin_signature(img: Image.Image, seed: int) -> Image.Image:
+    """Initials a page outside the table -- below the table's content when
+    there is a blank margin there, otherwise in the blank corner beside the
+    title. Applied to every generated fixture: a caseworker's sign-off is
+    part of a realistic scan, and it must sit outside the table on its own.
+    """
+    text = INITIALS_POOL[seed % len(INITIALS_POOL)]
+    bottom = _content_bottom(img)
+    avail = img.height - bottom
+    if avail > 0.05 * img.height:
+        at = (0.74, (bottom + 0.32 * avail) / img.height)
+    else:
+        at = (0.83, 0.018)
+    return initials(img, text, at, seed=seed)
+
+
+def signoff_block(
+    img: Image.Image,
+    y_top_frac: float,
+    stamp_texts: Sequence[str],
+    signature_labels: Sequence[str],
+    seed: int,
+) -> Image.Image:
+    """An approval section below the table: several rubber stamps plus
+    several handwritten signatures, as found on the last page of an official
+    document. None of this is table content -- row/column detection must
+    leave it alone."""
+    out = img.convert("L")
+    w, h = out.width, out.height
+    rng = np.random.default_rng(seed)
+    d = ImageDraw.Draw(out)
+
+    band_top = int(y_top_frac * h)
+    n = len(stamp_texts)
+    slot = w / n
+    for i, text in enumerate(stamp_texts):
+        stamp_w = int(0.27 * w)
+        stamp_h = int(0.07 * h)
+        layer = Image.new("L", (stamp_w, stamp_h), 255)
+        ld = ImageDraw.Draw(layer)
+        ld.rounded_rectangle(
+            [4, 4, stamp_w - 5, stamp_h - 5], radius=12, outline=75, width=5
+        )
+        font = ImageFont.truetype(FONT_BOLD, int(stamp_h * 0.26))
+        tw = int(ld.textlength(text, font=font))
+        ld.text(((stamp_w - tw) // 2, int(stamp_h * 0.36)), text, font=font, fill=75)
+        angle = float(rng.uniform(-9, 9))
+        layer = layer.rotate(
+            angle, expand=True, resample=Image.Resampling.BICUBIC, fillcolor=255
+        )
+        cx = slot * (i + 0.5)
+        px = int(cx - layer.width / 2)
+        py = band_top
+        region = out.crop((px, py, px + layer.width, py + layer.height))
+        arr = np.minimum(
+            np.asarray(region, dtype=np.float32),
+            np.asarray(layer, dtype=np.float32) * 0.55 + 255 * 0.45,
+        )
+        out.paste(Image.fromarray(arr.astype(np.uint8)), (px, py))
+
+    sig_top = band_top + int(0.16 * h)
+    m = len(signature_labels)
+    slot2 = w / m
+    label_font = ImageFont.truetype(FONT_REGULAR, int(0.02 * h))
+    for j, label in enumerate(signature_labels):
+        cx = slot2 * (j + 0.5)
+        line_x0, line_x1 = cx - 0.09 * w, cx + 0.09 * w
+        pts = []
+        n2 = 18
+        for k in range(n2):
+            t = k / (n2 - 1)
+            px = line_x0 + t * (line_x1 - line_x0)
+            py = (
+                sig_top
+                - 0.018 * h
+                + 0.011 * h * math.sin(t * 7 + j)
+                + rng.normal(0, 1.4)
+            )
+            pts.append((px, py))
+        d.line(pts, fill=85, width=2, joint="curve")
+        d.line([(line_x0, sig_top), (line_x1, sig_top)], fill=INK, width=1)
+        tw = int(d.textlength(label, font=label_font))
+        d.text(
+            (cx - tw / 2, sig_top + int(0.006 * h)), label, font=label_font, fill=INK
+        )
+    return out
+
+
 def downsample(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.resize((w, h), Image.Resampling.LANCZOS)
 
@@ -664,6 +870,9 @@ class Fixture:
     people: list[Person] = field(default_factory=list)
     size_px: tuple[int, int] = (PAGE_W, PAGE_H)
     notes: str = ""
+    # Off for fixtures whose own build already places (or deliberately omits)
+    # the signature, so `main()`'s auto margin-signature pass doesn't collide.
+    auto_signature: bool = True
 
 
 def _finish(img: Image.Image, width: int | None = None) -> Image.Image:
@@ -1231,6 +1440,52 @@ def f24() -> tuple[Image.Image, list[Person]]:
     return noise(img, 3.5, seed=24, salt=0.0006), BASE
 
 
+def f25() -> tuple[Image.Image, list[Person]]:
+    persons = renumber(list(BASE))
+    geom: dict[str, Any] = {}
+    raw = render_page(
+        "Przykład 25 – Odręczny podpis nachodzący na wiersz tabeli",
+        [layout_a(persons)],
+        geometry_out=geom,
+    )
+    raw = fit_page(raw)
+    row_edges = geom["row_edges"]
+    col_edges = geom["edges"]
+    target_row = 5  # Mariusz Kamiński -- the row the signature lands on
+    y0, y1 = row_edges[target_row], row_edges[target_row + 1]
+    x0 = col_edges[4]  # left edge of the "Adres zamieszkania" column
+    at = ((x0 + 10 * SS) / raw.width, (y0 + (y1 - y0) * 0.32) / raw.height)
+    img = initials(raw, "M.W.", at, seed=250, size_frac=0.024)
+    return _finish(rotate(noise(img, 3.0, seed=25), 0.5)), persons
+
+
+def f26() -> tuple[Image.Image, list[Person]]:
+    # The tail of a multi-page list: rows 6-8 continue from pages this fixture
+    # set does not include, followed by the approval section that closes the
+    # document. Deliberately not fit_page()'d to that content alone -- the
+    # canvas is grown afterwards to make room for the sign-off block below.
+    persons = list(BASE[5:8])
+    img = fit_page(
+        render_page(
+            "Przykład 26 – Ostatnia strona z pieczątkami i podpisami",
+            [layout_a(persons)],
+        ),
+        margin=40,
+    )
+    extra = int(0.22 * PAGE_H * SS)
+    canvas = Image.new("L", (img.width, img.height + extra), PAPER)
+    canvas.paste(img, (0, 0))
+    canvas = signoff_block(
+        canvas,
+        y_top_frac=(img.height + int(0.03 * extra)) / canvas.height,
+        stamp_texts=["ZATWIERDZONO", "KOMORNIK SĄDOWY", "ZA ZGODNOŚĆ"],
+        signature_labels=["Sporządził", "Sprawdził", "Zatwierdził"],
+        seed=26,
+    )
+    canvas = fit_page(canvas, margin=50)
+    return _finish(noise(canvas, 3.0, seed=260)), persons
+
+
 FIXTURES: list[Fixture] = [
     Fixture(
         filename="7.png",
@@ -1680,6 +1935,66 @@ FIXTURES: list[Fixture] = [
         ],
         build=f24,
     ),
+    Fixture(
+        filename="25.png",
+        label="Przykład 25",
+        title="Odręczny podpis nachodzący na wiersz tabeli",
+        layout="A",
+        targets=["Mariusz Kamiński"],
+        distortion="parafka poza tabelą (jak zawsze) + dodatkowy podpis wchodzący w komórkę Adres wiersza 5",
+        why=(
+            "Every generated fixture carries a caseworker's initialed "
+            "signature outside the table (see `margin_signature()` in the "
+            "generator). This one additionally puts a second signature mark "
+            "across the 'Adres zamieszkania' cell of row 5, because in real "
+            "scans a signature does occasionally stray onto the table. OCR "
+            "fragments from the stray ink must not be read as cell content, "
+            "must not shift row boundaries, and must not stop the row from "
+            "being found or fully redacted."
+        ),
+        scenarios=[
+            {
+                "query": "Mariusz Kamiński",
+                "expected_matches": 1,
+                "expected_rows": [5],
+                "must": "the in-cell signature ink must not corrupt row 5's fields or leak into the redaction band",
+            },
+        ],
+        build=f25,
+    ),
+    Fixture(
+        filename="26.png",
+        label="Przykład 26",
+        title="Ostatnia strona z pieczątkami i podpisami",
+        layout="A",
+        targets=["Tomasz Zieliński"],
+        distortion="3 pieczątki + 3 odręczne podpisy zatwierdzające pod tabelą",
+        why=(
+            "The last page of a real multi-page debtor list carries an "
+            "approval section, not just more rows: here three stamps "
+            "('ZATWIERDZONO', 'KOMORNIK SĄDOWY', 'ZA ZGODNOŚĆ') and three "
+            "handwritten sign-offs ('Sporządził' / 'Sprawdził' / "
+            "'Zatwierdził') sit below a short, page-ending table. Layout "
+            "analysis must not mistake the stamps/signatures block for more "
+            "table rows, and must not let it shift or truncate the real "
+            "rows above it."
+        ),
+        scenarios=[
+            {
+                "query": "Tomasz Zieliński",
+                "expected_matches": 1,
+                "expected_rows": [7],
+                "must": "the sign-off block (3 stamps, 3 signatures) below the table must not be read as additional rows",
+            },
+        ],
+        build=f26,
+        notes=(
+            "Row numbers 6-8 continue from earlier pages not included in "
+            "this fixture set; this is deliberately the tail of a longer "
+            "list, not a fresh table starting at row 1."
+        ),
+        auto_signature=False,
+    ),
 ]
 
 
@@ -1746,6 +2061,7 @@ def _rows_for_manifest(fixture: Fixture) -> list[dict[str, Any]]:
             "imie": p.imie,
             "nazwisko": p.nazwisko,
             "full_name": p.full_name,
+            "pesel": p.pesel or None,
             "adres": [line for line in p.adres if line],
             "kwota": p.kwota,
             "wierzyciel": " ".join(w for w in p.wierzyciel if w),
@@ -1840,6 +2156,9 @@ def verify() -> None:
 def main() -> None:
     for fixture in FIXTURES:
         img, rows = fixture.build()
+        if fixture.auto_signature:
+            seed = int(fixture.filename.removesuffix(".png"))
+            img = margin_signature(img, seed=seed)
         # Record what was actually rendered so the manifest cannot claim a row
         # the image does not contain.
         fixture.people = rows

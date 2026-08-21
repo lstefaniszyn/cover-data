@@ -700,20 +700,20 @@ Phase 3 rewrites `manifest.json` through the generator. The additions are additi
 
 #### Automated
 
-- [x] 3.1 Regenerating with no source edit produces byte-identical PNGs — determinism preserved; a diff means the geometric/photometric split is wrong
-- [x] 3.2 Identity round-trip: a mask pushed through a chain of no-op geometric transforms recovers its edges exactly, proving the NEAREST/zero-fill mask contract holds
-- [x] 3.3 `verify()` passes, including the new geometry and scenario checks, with the ink check running against the pre-photometric render
-- [x] 3.4 `manifest.json` parses; every referenced image exists; every generated fixture declares geometry, and `1.png`–`6.png` declare `null`
-- [x] 3.5 Exported row boundaries are ordered and non-crossing within each table, and column boundaries likewise
-- [x] 3.6 Declared row counts match `ground_truth_rows` length per fixture, including the degenerate cases: `20.png` → 0, `19.png` → 1, `26.png` → 3, `15.png` → 22, `18.png` → 26
-- [x] 3.7 `23.png` declares two tables; every other fixture declares one
-- [x] 3.8 `uv run pytest tests/test_fixtures.py` passes; `uv run mypy src` still passes
+- [x] 3.1 Regenerating with no source edit produces byte-identical PNGs — determinism preserved; a diff means the geometric/photometric split is wrong — 753fae5
+- [x] 3.2 Identity round-trip: a mask pushed through a chain of no-op geometric transforms recovers its edges exactly, proving the NEAREST/zero-fill mask contract holds — 753fae5
+- [x] 3.3 `verify()` passes, including the new geometry and scenario checks, with the ink check running against the pre-photometric render — 753fae5
+- [x] 3.4 `manifest.json` parses; every referenced image exists; every generated fixture declares geometry, and `1.png`–`6.png` declare `null` — 753fae5
+- [x] 3.5 Exported row boundaries are ordered and non-crossing within each table, and column boundaries likewise — 753fae5
+- [x] 3.6 Declared row counts match `ground_truth_rows` length per fixture, including the degenerate cases: `20.png` → 0, `19.png` → 1, `26.png` → 3, `15.png` → 22, `18.png` → 26 — 753fae5
+- [x] 3.7 `23.png` declares two tables; every other fixture declares one — 753fae5
+- [x] 3.8 `uv run pytest tests/test_fixtures.py` passes; `uv run mypy src` still passes — 753fae5
 
 #### Manual
 
-- [x] 3.9 Exported boundaries drawn back over their source images sit on the true rules — checked specifically on `11.png` (19px wave), `13.png` (keystone), `17.png` (crease), and `18.png` (bottom-edge clip)
-- [x] 3.10 `16.png`'s exported bands, drawn over the borderless table, bracket the correct text rows
-- [x] 3.11 The geometry block reads as something a human could interpret without reading the generator
+- [x] 3.9 Exported boundaries drawn back over their source images sit on the true rules — checked specifically on `11.png` (19px wave), `13.png` (keystone), `17.png` (crease), and `18.png` (bottom-edge clip) — 753fae5
+- [x] 3.10 `16.png`'s exported bands, drawn over the borderless table, bracket the correct text rows — 753fae5
+- [x] 3.11 The geometry block reads as something a human could interpret without reading the generator — 753fae5
 
 ### Phase 4: Typed domain model and OCR adapter
 

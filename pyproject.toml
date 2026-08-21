@@ -6,8 +6,10 @@ readme = "README.md"
 authors = [
     { name = "Lukasz Stefaniszyn", email = "stefaniszynlukasz@gmail.com" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
+    "paddleocr[doc-parser]>=3.7.0",
+    "paddlepaddle>=3.3.1",
     "typer>=0.27.1",
 ]
 

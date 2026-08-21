@@ -672,29 +672,29 @@ Phase 3 rewrites `manifest.json` through the generator. The additions are additi
 
 #### Automated
 
-- [x] 1.1 Every relative link and file path referenced by the edited foundation documents resolves to something that exists
-- [x] 1.2 No reference to `context/changes/testing-fixture-foundation/` remains anywhere under `context/`
-- [x] 1.3 No document under `context/foundation/` still describes the fixture set as six files
+- [x] 1.1 Every relative link and file path referenced by the edited foundation documents resolves to something that exists — f3599ca
+- [x] 1.2 No reference to `context/changes/testing-fixture-foundation/` remains anywhere under `context/` — f3599ca
+- [x] 1.3 No document under `context/foundation/` still describes the fixture set as six files — f3599ca
 
 #### Manual
 
-- [x] 1.4 FR-004 and FR-005 read as a contract an implementer could build S-02 from without asking a follow-up question
-- [x] 1.5 Each amended FR carries a `> Socrates:` note, matching the file's existing convention
-- [x] 1.6 The column-role vocabulary in `CLAUDE.md` matches the header text actually rendered by layouts A, B and C
+- [x] 1.4 FR-004 and FR-005 read as a contract an implementer could build S-02 from without asking a follow-up question — f3599ca
+- [x] 1.5 Each amended FR carries a `> Socrates:` note, matching the file's existing convention — f3599ca
+- [x] 1.6 The column-role vocabulary in `CLAUDE.md` matches the header text actually rendered by layouts A, B and C — f3599ca
 
 ### Phase 2: Python 3.13 migration and offline OCR stack
 
 #### Automated
 
-- [ ] 2.1 `uv lock --check` passes and `uv sync --locked` succeeds on 3.13
-- [ ] 2.2 Full gate green after the pin move, before dependencies are added: `uv run ruff check . && uv run mypy src && uv run pytest`
-- [ ] 2.3 Full gate green again after the dependency stack lands
-- [ ] 2.4 `uv run python -c "import paddleocr, cv2"` succeeds
-- [ ] 2.5 The documented generator invocation runs to completion on 3.13 and reports its `verify()` pass
+- [x] 2.1 `uv lock --check` passes and `uv sync --locked` succeeds on 3.13
+- [x] 2.2 Full gate green after the pin move, before dependencies are added: `uv run ruff check . && uv run mypy src && uv run pytest`
+- [x] 2.3 Full gate green again after the dependency stack lands
+- [x] 2.4 `uv run python -c "import paddleocr, cv2"` succeeds
+- [x] 2.5 The documented generator invocation runs to completion on 3.13 and reports its `verify()` pass
 
 #### Manual
 
-- [ ] 2.6 A one-off script OCRs `context/test_images/7.png` and prints recognized Polish text with per-fragment scores, with the machine's network disabled or the model directories confirmed as the only source
+- [x] 2.6 A one-off script OCRs `context/test_images/7.png` and prints recognized Polish text with per-fragment scores, with the machine's network disabled or the model directories confirmed as the only source
 
 ### Phase 3: Fixture geometry export and manifest-driven harness
 

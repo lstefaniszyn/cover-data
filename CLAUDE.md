@@ -134,7 +134,9 @@ The fixture generator at `context/test_images/generate_edge_cases.py` is fixture
 uv run --with pillow --with numpy --no-project python context/test_images/generate_edge_cases.py
 ```
 
-OCR model weights live in a git-ignored `models/` directory, provisioned locally before any test that touches the real engine — provisioning steps land with the dependency stack in `scan-row-reconstruction` Phase 2.
+On Windows, its per-fixture progress lines contain Polish diacritics that the default console codepage (cp1252) cannot encode — set `PYTHONUTF8=1` first, or the run crashes on a `print`, not on anything wrong with the generator itself.
+
+OCR model weights live in a git-ignored `models/` directory, provisioned locally before any test that touches the real engine, and pinned by explicit directory in `src/cover_data/ocr/config.py` so inference never fetches over the network. Provisioning is a one-time manual download, not something `uv sync` or the PaddleOCR pipeline does automatically — `paddleocr`'s own downloader uses `requests`/`certifi` like `pip-audit` (see above) and fails the same way against this network's TLS-inspecting proxy. The workaround is Windows' own trust store: `truststore==0.10.4` (a transitive PaddleOCR dependency) validates successfully where bare `requests` does not, and `curl` with the proxy's CA cert (`C:\ProgramData\Norton\Antivirus\wscert.pem` on this machine, or wherever `NODE_EXTRA_CA_CERTS` points) works too. Fetch each of the five PP-OCRv5 pipeline models — `PP-OCRv5_server_det`, `latin_PP-OCRv5_mobile_rec` (Polish is Latin-script, `lang="pl"`), `PP-LCNet_x1_0_doc_ori`, `UVDoc`, `PP-LCNet_x1_0_textline_ori` — as a `<name>_infer.tar` from `https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/`, and extract each tar as-is into `models/<name>_infer/`; `config.py`'s directory constants already match those unpacked names.
 
 ## MCP
 

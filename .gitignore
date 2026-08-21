@@ -157,3 +157,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# OCR model weights (pre-placed locally, never fetched at inference; see CLAUDE.md)
+/models/

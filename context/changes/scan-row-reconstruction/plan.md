@@ -719,18 +719,18 @@ Phase 3 rewrites `manifest.json` through the generator. The additions are additi
 
 #### Automated
 
-- [ ] 4.1 Unit tests construct synthetic fragments at chosen confidence levels and assert the flag is set correctly at, above, and below threshold, and that no fragment is ever dropped
-- [ ] 4.2 Round-trip test: a known point mapped through the preprocessing transform and back lands within tolerance of itself
-- [ ] 4.3 Role lookup on a synthetic layout-B table returns nothing for `imie` and a column for `imie_i_nazwisko`; on layout A the reverse
-- [ ] 4.4 Row identity is `(table index, positional index)` end to end — a synthetic two-table document distinguishes its two "row 1"s, and a row whose `lp` cell is absent, empty, or non-monotonic still holds its correct position
-- [ ] 4.5 A `slow`-marked test runs the real adapter over `7.png` and asserts fragments are returned with non-empty text, four-point polygons within image bounds, and confidences in the engine's documented range
-- [ ] 4.6 `uv run mypy src` passes under `strict = true`
-- [ ] 4.7 `uv run pytest -m 'not slow'` stays fast enough for the commit gate
+- [x] 4.1 Unit tests construct synthetic fragments at chosen confidence levels and assert the flag is set correctly at, above, and below threshold, and that no fragment is ever dropped
+- [x] 4.2 Round-trip test: a known point mapped through the preprocessing transform and back lands within tolerance of itself
+- [x] 4.3 Role lookup on a synthetic layout-B table returns nothing for `imie` and a column for `imie_i_nazwisko`; on layout A the reverse
+- [x] 4.4 Row identity is `(table index, positional index)` end to end — a synthetic two-table document distinguishes its two "row 1"s, and a row whose `lp` cell is absent, empty, or non-monotonic still holds its correct position
+- [x] 4.5 A `slow`-marked test runs the real adapter over `7.png` and asserts fragments are returned with non-empty text, four-point polygons within image bounds, and confidences in the engine's documented range
+- [x] 4.6 `uv run mypy src` passes under `strict = true`
+- [x] 4.7 `uv run pytest -m 'not slow'` stays fast enough for the commit gate
 
 #### Manual
 
-- [ ] 4.8 Recognized text on `9.png` (diacritic-heavy surnames: ł, ż, ą, ś, ć) is inspected by eye — this is the fixture built for Risk #4 and directly informs whether FR-005's exact-match assumption survives into S-02
-- [ ] 4.9 Recognized PESEL digits on a layout-A fixture are compared against the manifest to gauge digit-level accuracy, since PESEL search has no linguistic redundancy to fall back on
+- [x] 4.8 Recognized text on `9.png` (diacritic-heavy surnames: ł, ż, ą, ś, ć) is inspected by eye — this is the fixture built for Risk #4 and directly informs whether FR-005's exact-match assumption survives into S-02
+- [x] 4.9 Recognized PESEL digits on a layout-A fixture are compared against the manifest to gauge digit-level accuracy, since PESEL search has no linguistic redundancy to fall back on
 
 ### Phase 5: Row and column geometry — two strategies and a selector
 

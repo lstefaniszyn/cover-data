@@ -29,6 +29,12 @@ markers = ["slow: fixture-heavy OCR or full-page redaction test"]
 strict = true
 files = ["src"]
 
+[[tool.mypy.overrides]]
+# paddleocr ships no py.typed marker / stubs; ocr/paddle.py is the only
+# module that imports it (see its module docstring), so this is confined.
+module = "paddleocr"
+ignore_missing_imports = true
+
 [tool.ruff]
 # Lint this project's code only. The repo carries vendored agent tooling with
 # its own Python scripts (.github/skills/**) that we neither own nor style.

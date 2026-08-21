@@ -736,6 +736,23 @@ Phase 3 rewrites `manifest.json` through the generator. The additions are additi
 
 #### Automated
 
+
+
+Done so far (Phase 5, TDD, all green, uncommitted):
+- src/cover_data/geometry/lines.py — horizontal/vertical ruling-line detection (morphological opening + thickness filter to reject shadow bands)
+- src/cover_data/geometry/rows_ruled.py — Curve/RowBand types, pairs consecutive rules into row bands, page-edge extension helper
+- src/cover_data/geometry/rows_text.py — borderless row strategy (gap-based fragment clustering, median-robust baseline fit, midpoint band expansion)
+- src/cover_data/geometry/strategy.py — per-document ruled-vs-borderless selector with independent cross-check
+- src/cover_data/geometry/columns.py — column bands + Polish header-vocabulary role resolution, page-edge extension for the last column
+- src/cover_data/geometry/table.py — multi-table gap segmentation, header-likeness detection, fragment→cell assignment (blank cells kept, stray fragments retained as unassigned)
+- src/cover_data/geometry/document.py — orchestrator tying all of the above into reconstruct_document()
+
+That's all 7 "Changes Required" items for Phase 5, each with its own focused unit tests (~40 new tests), mypy --strict clean, ruff clean, 147 fast tests green. Nothing committed yet — the skill commits only once the whole phase's Progress checkboxes are satisfied.
+
+What's left: the slow-marked integration tests (Progress rows 5.1–5.13) that run the real OCR engine + real line detection against the 20 generated fixtures and compare against manifest.json's exported geometry/content ground truth. I just started calibrating line-detection thresholds against a real fixture (7.png) to find working min_length_frac values before writing those tests — results so far are a bit noisy (vertical detection is non-monotonic across thresholds, worth digging into) so I'm tuning that now.
+
+
+
 - [ ] 5.1 `slow`-marked: reconstructed row extents match the Phase 3 exported geometry on all 20 generated fixtures, asserting **top and bottom boundaries together** — never separately, since `test-plan.md` Risk #2 warns that separately-satisfiable assertions let the fix for one silently break the other. Tolerance is expressed as a fraction of *that fixture's own median row height*, not an absolute pixel count — the set spans 760px to 1240px wide with row pitches from ~24px (`15.png`) to full-size, and one absolute number cannot serve both. Start at 0.15 of median row height and record any change with its reason
 - [ ] 5.2 `slow`-marked: best-match assignment between reconstructed rows and `ground_truth_rows` resolves to the **identity permutation** on every generated fixture — comparison by column role rather than column index so layouts A/B/C share one assertion, normalization limited to case and whitespace, and `7.png`'s two `Anna Nowak` rows compared as an unordered pair
 - [ ] 5.3 Row counts match the manifest on every generated fixture, including `20.png` → 0, `19.png` → 1, `26.png` → 3, `15.png` → 22, `18.png` → 26
